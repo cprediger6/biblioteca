@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-rgb: 0, 0, 0;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-rgb));
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+input[type="number"],
+textarea,
+select {
+  color: #1a1a1a !important;
+  background-color: #ffffff !important;
+  -webkit-text-fill-color: #1a1a1a !important;
+}
+
+/* Para inputs en modo oscuro */
+.bg-gray-900 input,
+.bg-gray-800 input,
+.dark input {
+  color: #ffffff !important;
+  background-color: #1f2937 !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
+/* Placeholders visibles */
+::placeholder {
+  color: #9ca3af !important;
+  opacity: 1 !important;
+}
+
+.dark ::placeholder {
+  color: #6b7280 !important;
+}
+
+/* Quitar el color automático de autocompletado */
+input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px white inset !important;
+  -webkit-text-fill-color: #1a1a1a !important;
+}
+
+.dark input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px #1f2937 inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
