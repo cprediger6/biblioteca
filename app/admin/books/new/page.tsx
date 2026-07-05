@@ -1,4 +1,5 @@
-﻿// app/admin/books/new/page.tsx // Archivo para la página de creación de un nuevo libro en el panel de administración
+﻿// app/admin/books/new/page.tsx 
+
 
 "use client";
 
