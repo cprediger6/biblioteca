@@ -7,9 +7,8 @@ import Link from "next/link";
 import {
   ArrowLeft, Save, X, User, Mail, Phone,
   Shield, Lock, Loader2, CheckCircle, AlertCircle,
-  CreditCard, Printer, Camera
+  CreditCard, Printer, Camera, Upload, Image as ImageIcon
 } from "lucide-react";
-import PhotoUpload from "@/components/PhotoUpload";
 
 interface UserData {
   id: string;
@@ -25,6 +24,7 @@ interface UserData {
 export default function NewUserPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [createdUser, setCreatedUser] = useState<UserData | null>(null);
@@ -83,83 +83,135 @@ export default function NewUserPage() {
     return isValid;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  
-  if (!validateForm()) {
-    return;
-  }
+  const handlePhotoUpload = async (file: File): Promise<string | null> => {
+    setUploading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("type", "user-photo");
 
-  setLoading(true);
-  setError("");
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
 
-  try {
-    // 1. Primero crear el usuario
-    const res = await fetch("/api/users", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(formData),
-    });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Error al subir la foto");
+      }
 
-    const data = await res.json();
+      const data = await response.json();
+      return data.url;
+    } catch (error) {
+      console.error("Error uploading photo:", error);
+      setError(error instanceof Error ? error.message : "Error al subir la foto");
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
 
-    if (!res.ok) {
-      setError(data.error || "No se pudo crear el usuario");
-      setLoading(false);
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validaciones
+    if (!file.type.startsWith("image/")) {
+      setError("Por favor, selecciona una imagen válida");
       return;
     }
 
-    let userData = data.user;
-
-    // 2. Si hay foto, subirla
-    if (photoFile && userData) {
-      const uploadFormData = new FormData();
-      uploadFormData.append("file", photoFile);
-      uploadFormData.append("type", "user-photo");
-      uploadFormData.append("userId", userData.id);
-
-      const uploadRes = await fetch("/api/upload", {
-        method: "POST",
-        body: uploadFormData,
-      });
-
-      if (uploadRes.ok) {
-        const uploadData = await uploadRes.json();
-        // 3. Actualizar el usuario con la URL de la foto
-        const updateRes = await fetch(`/api/users/${userData.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: userData.name,
-            email: userData.email,
-            phone: userData.phone,
-            identification: userData.identification,
-            role: userData.role,
-            photo: uploadData.url,
-          }),
-        });
-        
-        if (updateRes.ok) {
-          const updatedUser = await updateRes.json();
-          userData = updatedUser.user;
-        }
-      }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("La imagen no debe superar los 5MB");
+      return;
     }
 
-    setCreatedUser(userData);
-    setShowSuccessModal(true);
-    setSuccess(true);
+    // Mostrar preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPhotoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+
+    setPhotoFile(file);
+    setError("");
+  };
+
+  const handleRemovePhoto = () => {
+    setPhotoFile(null);
+    setPhotoPreview(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     
-  } catch (error) {
-    console.error("Error:", error);
-    setError("Error al crear el usuario");
-    setLoading(false);
-  }
-};
+    if (!validateForm()) {
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      // 1. Crear el usuario
+      const res = await fetch("/api/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "No se pudo crear el usuario");
+        setLoading(false);
+        return;
+      }
+
+      let userData = data.user;
+
+      // 2. Si hay foto, subirla a Cloudinary
+      if (photoFile && userData) {
+        const photoUrl = await handlePhotoUpload(photoFile);
+        
+        if (photoUrl) {
+          // 3. Actualizar el usuario con la URL de la foto
+          const updateRes = await fetch(`/api/users/${userData.id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              name: userData.name,
+              email: userData.email,
+              phone: userData.phone,
+              identification: userData.identification,
+              role: userData.role,
+              photo: photoUrl,
+            }),
+          });
+          
+          if (updateRes.ok) {
+            const updatedUser = await updateRes.json();
+            userData = updatedUser.user;
+          }
+        }
+      }
+
+      setCreatedUser(userData);
+      setShowSuccessModal(true);
+      setSuccess(true);
+      
+    } catch (error) {
+      console.error("Error:", error);
+      setError("Error al crear el usuario");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -470,12 +522,79 @@ export default function NewUserPage() {
                 <Camera className="inline w-4 h-4 mr-2 text-indigo-500" />
                 Foto de Perfil <span className="text-gray-400 text-xs">(opcional)</span>
               </label>
-              <PhotoUpload
-                onPhotoChange={(file, preview) => {
-                  setPhotoFile(file);
-                  setPhotoPreview(preview);
-                }}
-              />
+              
+              <div className="flex flex-col sm:flex-row items-start gap-4">
+                {/* Preview */}
+                {photoPreview ? (
+                  <div className="relative w-24 h-24 rounded-full overflow-hidden border-2 border-gray-200 flex-shrink-0">
+                    <img
+                      src={photoPreview}
+                      alt="Foto de perfil"
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      disabled={uploading}
+                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors disabled:opacity-50"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-24 h-24 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center flex-shrink-0 bg-gray-50">
+                    <div className="text-center">
+                      <ImageIcon className="w-8 h-8 text-gray-400 mx-auto mb-1" />
+                      <span className="text-xs text-gray-400">Sin foto</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Botón de carga */}
+                <div className="flex-1">
+                  <label className="cursor-pointer inline-block">
+                    <div className={`px-4 py-2 rounded-xl font-medium text-sm transition flex items-center gap-2
+                      ${uploading 
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
+                        : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                      }
+                    `}>
+                      {uploading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Subiendo...
+                        </>
+                      ) : photoPreview ? (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          Cambiar foto
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          Seleccionar foto
+                        </>
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoSelect}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                  </label>
+                  <p className="text-xs text-gray-400 mt-2">
+                    JPG, PNG o WebP • Máximo 5MB
+                  </p>
+                  {uploading && (
+                    <p className="text-xs text-indigo-600 mt-1 flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      Subiendo a Cloudinary...
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Email */}
@@ -606,7 +725,7 @@ export default function NewUserPage() {
               </Link>
               <button
                 type="submit"
-                disabled={loading || success}
+                disabled={loading || uploading}
                 className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white rounded-xl hover:shadow-xl transition-all duration-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
