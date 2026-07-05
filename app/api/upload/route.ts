@@ -1,13 +1,16 @@
 // app/api/upload/route.ts
 import { NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import { join } from "path";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
-import { randomUUID } from "crypto";
+import { v2 as cloudinary } from "cloudinary";
 
-const isVercel = process.env.VERCEL === "1" || process.env.VERCEL === "true";
+// Configurar Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 // Tipos para las imágenes
 interface ImageInfo {
@@ -15,32 +18,8 @@ interface ImageInfo {
   url: string | null;
 }
 
-// Tipo para el usuario con photo
-type UserWithPhoto = {
-  id: string;
-  name: string;
-  email: string;
-  password: string;
-  phone: string | null;
-  identification: string;
-  photo: string | null;
-  role: string;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
 export async function POST(request: Request) {
   try {
-    if (isVercel) {
-      return NextResponse.json(
-        {
-          error:
-            "Local filesystem uploads are not supported on Vercel. Use cloud storage or deploy locally.",
-        },
-        { status: 501 }
-      );
-    }
-
     // Verificar autenticación
     const session = await getServerSession(authOptions);
     if (!session || session.user?.role !== "admin") {
@@ -82,9 +61,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Determinar carpeta de destino según el tipo
-    let uploadDir: string;
-    let publicPath: string;
+    // Determinar la carpeta y el nombre del archivo en Cloudinary
+    let folder: string;
+    let publicId: string;
     let entityId: string | null = null;
 
     switch (type) {
@@ -106,8 +85,8 @@ export async function POST(request: Request) {
             { status: 404 }
           );
         }
-        uploadDir = join(process.cwd(), "public", "uploads", "books", bookId);
-        publicPath = `/uploads/books/${bookId}`;
+        folder = `biblioteca/books/${bookId}`;
+        publicId = `${type}-${Date.now()}`;
         entityId = bookId;
         break;
 
@@ -128,8 +107,8 @@ export async function POST(request: Request) {
             { status: 404 }
           );
         }
-        uploadDir = join(process.cwd(), "public", "uploads", "users", userId);
-        publicPath = `/uploads/users/${userId}`;
+        folder = `biblioteca/users/${userId}`;
+        publicId = `photo-${Date.now()}`;
         entityId = userId;
         break;
 
@@ -140,18 +119,35 @@ export async function POST(request: Request) {
         );
     }
 
-    // Crear directorio si no existe
-    await mkdir(uploadDir, { recursive: true });
+    // Convertir archivo a buffer
+    const bytes = await file.arrayBuffer();
+    const buffer = Buffer.from(bytes);
 
-    // Generar nombre único para el archivo
-    const extension = file.name.split('.').pop() || "jpg";
-    const fileName = `${type}-${Date.now()}-${randomUUID().slice(0, 8)}.${extension}`;
-    const filePath = join(uploadDir, fileName);
-    const imageUrl = `${publicPath}/${fileName}`;
+    // Subir a Cloudinary
+    const result = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: folder,
+          public_id: publicId,
+          resource_type: "image",
+          transformation: [
+            { quality: "auto" },
+            { fetch_format: "auto" },
+          ],
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      
+      // Escribir el buffer en el stream
+      const { Readable } = require("stream");
+      const readableStream = Readable.from(buffer);
+      readableStream.pipe(uploadStream);
+    });
 
-    // Guardar archivo
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(filePath, buffer);
+    const imageUrl = (result as any).secure_url;
 
     // Actualizar la entidad correspondiente en la base de datos
     let updatedEntity = null;
@@ -166,24 +162,19 @@ export async function POST(request: Request) {
         data: updateData,
       });
     } else if (type === "user-photo") {
-      // Usar update con any para evitar el error de TypeScript
-      // mientras se completa la migración
       updatedEntity = await prisma.user.update({
         where: { id: entityId! },
-        data: { 
-          // @ts-ignore - Photo field will be added after migration
-          photo: imageUrl 
-        },
+        data: { photo: imageUrl },
       });
     }
 
     return NextResponse.json({
       success: true,
       url: imageUrl,
+      publicId: (result as any).public_id,
       message: "Imagen subida exitosamente",
       type: type,
       entityId: entityId,
-      fileName: fileName,
       fileSize: file.size,
       updatedEntity: updatedEntity,
     }, { status: 200 });
@@ -191,7 +182,6 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Error detallado al subir imagen:", error);
     
-    // Manejar errores específicos
     if (error instanceof Error) {
       return NextResponse.json(
         { 
@@ -209,7 +199,7 @@ export async function POST(request: Request) {
   }
 }
 
-// DELETE - Eliminar una imagen
+// DELETE - Eliminar una imagen de Cloudinary
 export async function DELETE(request: Request) {
   try {
     // Verificar autenticación
@@ -231,6 +221,30 @@ export async function DELETE(request: Request) {
         { error: "Faltan datos requeridos: url, type y entityId son obligatorios" },
         { status: 400 }
       );
+    }
+
+    // Extraer el public_id de la URL de Cloudinary
+    // Ejemplo: https://res.cloudinary.com/cloud_name/image/upload/v1234567890/biblioteca/books/xxx/cover-1234567890.jpg
+    const urlParts = url.split('/');
+    const uploadIndex = urlParts.indexOf('upload');
+    if (uploadIndex === -1) {
+      return NextResponse.json(
+        { error: "URL de Cloudinary inválida" },
+        { status: 400 }
+      );
+    }
+    
+    // Obtener la parte después de 'upload/v1234567890/'
+    const publicIdWithExtension = urlParts.slice(uploadIndex + 2).join('/');
+    // Eliminar la extensión del archivo
+    const publicId = publicIdWithExtension.replace(/\.[^/.]+$/, '');
+
+    // Eliminar de Cloudinary
+    try {
+      await cloudinary.uploader.destroy(publicId);
+    } catch (cloudinaryError) {
+      console.error("Error al eliminar de Cloudinary:", cloudinaryError);
+      // Continuamos aunque falle la eliminación en Cloudinary
     }
 
     // Determinar qué actualizar según el tipo
@@ -319,14 +333,11 @@ export async function GET(request: Request) {
         images = [coverImage, backImage].filter(img => img.url !== null);
       }
     } else if (type === "user-photo") {
-      // Usar findFirst con select para evitar errores
       const user = await prisma.user.findUnique({
         where: { id: entityId },
       });
       
-      // @ts-ignore - Photo field will be added after migration
       if (user && user.photo) {
-        // @ts-ignore
         images = [{ type: "user-photo", url: user.photo }];
       }
     }
