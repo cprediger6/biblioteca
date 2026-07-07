@@ -41,7 +41,6 @@ export default function NewUserPage() {
     role: "user",
   });
 
-  // Validaciones individuales
   const [validationErrors, setValidationErrors] = useState({
     name: "",
     email: "",
@@ -83,13 +82,14 @@ export default function NewUserPage() {
     return isValid;
   };
 
-  const handlePhotoUpload = async (file: File): Promise<string | null> => {
+  const uploadUserPhoto = async (file: File, userId: string): Promise<string | null> => {
     setUploading(true);
     
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("type", "user-photo");
+      formData.append("userId", userId);
 
       const response = await fetch("/api/upload", {
         method: "POST",
@@ -116,7 +116,6 @@ export default function NewUserPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validaciones
     if (!file.type.startsWith("image/")) {
       setError("Por favor, selecciona una imagen válida");
       return;
@@ -127,7 +126,6 @@ export default function NewUserPage() {
       return;
     }
 
-    // Mostrar preview
     const reader = new FileReader();
     reader.onloadend = () => {
       setPhotoPreview(reader.result as string);
@@ -154,7 +152,6 @@ export default function NewUserPage() {
     setError("");
 
     try {
-      // 1. Crear el usuario
       const res = await fetch("/api/users", {
         method: "POST",
         headers: {
@@ -173,12 +170,10 @@ export default function NewUserPage() {
 
       let userData = data.user;
 
-      // 2. Si hay foto, subirla a Cloudinary
       if (photoFile && userData) {
-        const photoUrl = await handlePhotoUpload(photoFile);
+        const photoUrl = await uploadUserPhoto(photoFile, userData.id);
         
         if (photoUrl) {
-          // 3. Actualizar el usuario con la URL de la foto
           const updateRes = await fetch(`/api/users/${userData.id}`, {
             method: "PUT",
             headers: {
@@ -220,7 +215,6 @@ export default function NewUserPage() {
       ...formData,
       [e.target.name]: e.target.value,
     });
-    // Limpiar error del campo cuando el usuario escribe
     if (e.target.name in validationErrors) {
       setValidationErrors({
         ...validationErrors,
@@ -258,16 +252,68 @@ export default function NewUserPage() {
     setError("");
   };
 
+  // Función para generar el código de barras en formato Code128
+  const generateBarcodeSVG = (text: string) => {
+    // Esta es una implementación simplificada para Code128
+    // En producción recomendaría usar una librería como JsBarcode
+    const chars = text.split('');
+    const width = chars.length * 12 + 20;
+    const height = 40;
+    
+    let bars = '';
+    let x = 10;
+    
+    // Patrón simple para simular código de barras
+    chars.forEach((char, index) => {
+      const code = char.charCodeAt(0);
+      const pattern = [];
+      
+      // Generar un patrón de barras basado en el carácter
+      for (let i = 0; i < 6; i++) {
+        const bit = (code >> i) & 1;
+        pattern.push(bit);
+      }
+      
+      // Agregar barras
+      pattern.forEach((bit) => {
+        if (bit) {
+          bars += `<rect x="${x}" y="0" width="3" height="${height}" fill="black"/>`;
+        }
+        x += 3;
+      });
+      
+      // Espacio entre caracteres
+      x += 2;
+    });
+    
+    return `
+      <svg width="${width}" height="${height + 20}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${width}" height="${height + 20}" fill="white"/>
+        ${bars}
+        <text x="${width/2}" y="${height + 15}" text-anchor="middle" font-family="monospace" font-size="10" fill="black">${text}</text>
+      </svg>
+    `;
+  };
+
   const handlePrintCarnet = () => {
     if (createdUser) {
-      // Abrir en nueva ventana para imprimir
+      // URL base de Vercel
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'Genrado por Biblioteca+';
+      
       const printWindow = window.open('', '_blank', 'width=400,height=600');
       if (printWindow) {
+        const barcodeSvg = generateBarcodeSVG(createdUser.identification);
+        
         printWindow.document.write(`
           <html>
             <head>
               <title>Carnet - ${createdUser.name}</title>
               <style>
+                * {
+                  margin: 0;
+                  padding: 0;
+                  box-sizing: border-box;
+                }
                 body {
                   margin: 0;
                   padding: 20px;
@@ -275,176 +321,226 @@ export default function NewUserPage() {
                   justify-content: center;
                   align-items: center;
                   min-height: 100vh;
-                  background: #f3f4f6;
-                  font-family: Arial, sans-serif;
+                  background: #f0f0f0;
+                  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 }
-                .carnet {
-                  width: 85.5mm;
-                  height: 54mm;
+                .carnet-container {
+                  width: 340px;
                   background: white;
-                  border-radius: 4px;
-                  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                  padding: 4mm;
+                  border-radius: 16px;
+                  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+                  overflow: hidden;
                   border: 2px solid #1a1a2e;
                 }
-                .card-content {
+                .carnet-header {
+                  background: linear-gradient(135deg, #1a1a2e, #16213e);
+                  padding: 16px 20px;
                   display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  border-bottom: 3px solid #e94560;
+                }
+                .carnet-header .logo {
+                  color: white;
+                  font-size: 18px;
+                  font-weight: 700;
+                  letter-spacing: 1px;
+                }
+                .carnet-header .logo span {
+                  color: #e94560;
+                }
+                .carnet-header .badge {
+                  background: #e94560;
+                  color: white;
+                  padding: 4px 12px;
+                  border-radius: 20px;
+                  font-size: 10px;
+                  font-weight: 600;
+                  letter-spacing: 0.5px;
+                }
+                .carnet-body {
+                  padding: 20px;
+                  background: white;
+                }
+                .carnet-body .main-info {
+                  display: flex;
+                  gap: 16px;
+                  align-items: center;
+                  margin-bottom: 16px;
+                }
+                .photo-container {
+                  width: 80px;
+                  height: 80px;
+                  border-radius: 50%;
+                  overflow: hidden;
+                  border: 3px solid #1a1a2e;
+                  flex-shrink: 0;
+                  background: #f5f5f5;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                }
+                .photo-container img {
+                  width: 100%;
                   height: 100%;
-                  gap: 6px;
-                }
-                .left-section {
-                  flex: 1;
-                  display: flex;
-                  flex-direction: column;
-                  align-items: center;
-                  justify-content: center;
-                  padding-right: 6px;
-                }
-                .photo {
-                  width: 40px;
-                  height: 40px;
-                  border-radius: 50%;
-                  background: #e5e7eb;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  font-size: 20px;
-                  margin-bottom: 4px;
-                }
-                .photo-img {
-                  width: 40px;
-                  height: 40px;
-                  border-radius: 50%;
                   object-fit: cover;
-                  border: 2px solid #4f46e5;
-                  margin-bottom: 4px;
                 }
-                .left-text {
-                  font-size: 5px;
-                  text-align: center;
-                  color: #1a1a2e;
+                .photo-container .placeholder {
+                  font-size: 32px;
+                  color: #ccc;
                 }
-                .right-section {
-                  flex: 2;
-                  padding-left: 6px;
-                  border-left: 1px solid #e5e7eb;
+                .user-info {
+                  flex: 1;
                 }
-                .header {
-                  font-size: 8px;
-                  font-weight: bold;
+                .user-info .name {
+                  font-size: 16px;
+                  font-weight: 700;
                   color: #1a1a2e;
                   margin-bottom: 2px;
                 }
-                .label {
-                  font-size: 5px;
-                  color: #6b7280;
-                  margin-top: 1px;
-                }
-                .value {
-                  font-size: 7px;
+                .user-info .role {
+                  font-size: 11px;
                   font-weight: 600;
+                  color: #e94560;
+                  background: #fef2f2;
+                  padding: 2px 10px;
+                  border-radius: 12px;
+                  display: inline-block;
+                  margin-bottom: 4px;
+                }
+                .user-info .id-number {
+                  font-size: 12px;
+                  color: #666;
+                  font-weight: 500;
+                }
+                .details-grid {
+                  display: grid;
+                  grid-template-columns: 1fr 1fr;
+                  gap: 8px;
+                  margin-top: 12px;
+                  padding-top: 12px;
+                  border-top: 1px solid #eee;
+                }
+                .detail-item {
+                  display: flex;
+                  flex-direction: column;
+                }
+                .detail-item .label {
+                  font-size: 9px;
+                  color: #999;
+                  text-transform: uppercase;
+                  letter-spacing: 0.5px;
+                  font-weight: 600;
+                }
+                .detail-item .value {
+                  font-size: 12px;
+                  color: #1a1a2e;
+                  font-weight: 500;
+                  word-break: break-all;
+                }
+                .barcode-section {
+                  margin-top: 12px;
+                  padding-top: 12px;
+                  border-top: 1px solid #eee;
+                  text-align: center;
+                }
+                .barcode-section svg {
+                  max-width: 100%;
+                  height: auto;
+                }
+                .carnet-footer {
+                  background: #f8f9fa;
+                  padding: 10px 20px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  border-top: 1px solid #eee;
+                }
+                .carnet-footer .validity {
+                  font-size: 9px;
+                  color: #999;
+                }
+                .carnet-footer .validity strong {
                   color: #1a1a2e;
                 }
-                .barcode-container {
-                  margin-top: 2px;
-                  text-align: center;
+                .carnet-footer .website {
+                  font-size: 9px;
+                  color: #1a1a2e;
+                  font-weight: 600;
                 }
-                .barcode {
-                  font-family: 'Courier New', monospace;
-                  font-size: 10px;
-                  letter-spacing: 2px;
-                  background: #f9fafb;
-                  padding: 4px;
-                  border-radius: 4px;
-                  display: inline-block;
-                  border: 1px solid #e5e7eb;
-                }
-                .footer {
-                  font-size: 4px;
-                  color: #9ca3af;
-                  text-align: center;
-                  margin-top: 2px;
-                }
-                .role-badge {
-                  font-size: 5px;
-                  font-weight: bold;
-                  color: white;
-                  background: #4f46e5;
-                  padding: 2px 8px;
-                  border-radius: 2px;
-                  margin-top: 2px;
-                }
-                .info-row {
-                  display: flex;
-                  gap: 4px;
-                  margin-top: 1px;
-                }
-                .info-col {
-                  flex: 1;
+                .carnet-footer .website a {
+                  color: #e94560;
+                  text-decoration: none;
                 }
                 @media print {
                   body {
-                    padding: 0;
                     background: white;
+                    padding: 0;
                   }
-                  .carnet {
+                  .carnet-container {
                     box-shadow: none;
-                    margin: 0;
+                    border: 1px solid #ddd;
+                    border-radius: 8px;
                   }
+                }
+                @media print {
+                  body { padding: 0; }
+                  .carnet-container { box-shadow: none; }
                 }
               </style>
             </head>
             <body>
-              <div class="carnet">
-                <div class="card-content">
-                  <div class="left-section">
-                    ${createdUser.photo ? `
-                      <img src="${createdUser.photo}" class="photo-img" alt="Foto" />
-                    ` : `
-                      <div class="photo">📚</div>
-                    `}
-                    <div class="left-text" style="font-weight:bold;font-size:5px;">
-                      ${createdUser.name.split(' ')[0]}
+              <div class="carnet-container">
+                <div class="carnet-header">
+                  <div class="logo">📚 <span>Biblioteca</span>+</div>
+                  <div class="badge">${createdUser.role === 'admin' ? 'ADMIN' : 'USUARIO'}</div>
+                </div>
+                <div class="carnet-body">
+                  <div class="main-info">
+                    <div class="photo-container">
+                      ${createdUser.photo ? `
+                        <img src="${createdUser.photo}" alt="Foto de perfil" />
+                      ` : `
+                        <div class="placeholder">👤</div>
+                      `}
                     </div>
-                    <div class="role-badge">
-                      ${createdUser.role === 'admin' ? 'ADMIN' : 'USUARIO'}
+                    <div class="user-info">
+                      <div class="name">${createdUser.name}</div>
+                      <div class="role">${createdUser.role === 'admin' ? 'Administrador' : 'Usuario'}</div>
+                      <div class="id-number">ID: ${createdUser.identification}</div>
                     </div>
                   </div>
-                  <div class="right-section">
-                    <div class="header">📚 Biblioteca+</div>
-                    <div>
-                      <div class="label">NOMBRE COMPLETO</div>
-                      <div class="value">${createdUser.name}</div>
+                  <div class="details-grid">
+                    <div class="detail-item">
+                      <span class="label">Email</span>
+                      <span class="value">${createdUser.email}</span>
                     </div>
-                    <div>
-                      <div class="label">IDENTIFICACIÓN</div>
-                      <div class="value">${createdUser.identification}</div>
+                    <div class="detail-item">
+                      <span class="label">Teléfono</span>
+                      <span class="value">${createdUser.phone || 'N/A'}</span>
                     </div>
-                    <div class="info-row">
-                      <div class="info-col">
-                        <div class="label">EMAIL</div>
-                        <div class="value" style="font-size:5px;">${createdUser.email}</div>
-                      </div>
-                      <div class="info-col">
-                        <div class="label">TELÉFONO</div>
-                        <div class="value" style="font-size:5px;">${createdUser.phone || 'N/A'}</div>
-                      </div>
-                    </div>
-                    <div class="barcode-container">
-                      <div class="barcode">*${createdUser.identification}*</div>
-                    </div>
-                    <div class="footer">
-                      Válido desde ${new Date(createdUser.createdAt).toLocaleDateString()}
-                    </div>
+                  </div>
+                  <div class="barcode-section">
+                    ${barcodeSvg}
+                  </div>
+                </div>
+                <div class="carnet-footer">
+                  <div class="validity">
+                    Válido desde <strong>${new Date(createdUser.createdAt).toLocaleDateString('es-ES')}</strong>
+                  </div>
+                  <div class="website">
+                    <a href="${baseUrl}" target="_blank">${baseUrl.replace('https://', '')}</a>
                   </div>
                 </div>
               </div>
               <script>
                 window.onload = function() {
-                  window.print();
                   setTimeout(function() {
+                    window.print();
+                  }, 500);
+                  window.onafterprint = function() {
                     window.close();
-                  }, 1000);
+                  };
                 }
               </script>
             </body>
@@ -480,7 +576,6 @@ export default function NewUserPage() {
         {/* Formulario */}
         <div className="bg-white rounded-3xl shadow-2xl p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Mensajes de error y éxito */}
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm flex items-start">
                 <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
@@ -508,8 +603,7 @@ export default function NewUserPage() {
                 value={formData.name}
                 onChange={handleChange}
                 placeholder="Ej: Juan Pérez"
-                className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white ${validationErrors.name ? "border-red-300 bg-red-50" : "border-gray-200"
-                  }`}
+                className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white ${validationErrors.name ? "border-red-300 bg-red-50" : "border-gray-200"}`}
               />
               {validationErrors.name && (
                 <p className="text-xs text-red-500 mt-1">{validationErrors.name}</p>
@@ -524,7 +618,6 @@ export default function NewUserPage() {
               </label>
               
               <div className="flex flex-col sm:flex-row items-start gap-4">
-                {/* Preview */}
                 {photoPreview ? (
                   <div className="relative w-24 h-24 rounded-full overflow-hidden border-2 border-gray-200 flex-shrink-0">
                     <img
@@ -535,8 +628,7 @@ export default function NewUserPage() {
                     <button
                       type="button"
                       onClick={handleRemovePhoto}
-                      disabled={uploading}
-                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors disabled:opacity-50"
+                      className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
                     >
                       <X size={14} />
                     </button>
@@ -550,38 +642,17 @@ export default function NewUserPage() {
                   </div>
                 )}
 
-                {/* Botón de carga */}
                 <div className="flex-1">
                   <label className="cursor-pointer inline-block">
-                    <div className={`px-4 py-2 rounded-xl font-medium text-sm transition flex items-center gap-2
-                      ${uploading 
-                        ? "bg-gray-100 text-gray-400 cursor-not-allowed" 
-                        : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
-                      }
-                    `}>
-                      {uploading ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Subiendo...
-                        </>
-                      ) : photoPreview ? (
-                        <>
-                          <Upload className="w-4 h-4" />
-                          Cambiar foto
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="w-4 h-4" />
-                          Seleccionar foto
-                        </>
-                      )}
+                    <div className="px-4 py-2 rounded-xl font-medium text-sm transition flex items-center gap-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100">
+                      <Upload className="w-4 h-4" />
+                      {photoPreview ? "Cambiar foto" : "Seleccionar foto"}
                     </div>
                     <input
                       type="file"
                       accept="image/*"
                       onChange={handlePhotoSelect}
                       className="hidden"
-                      disabled={uploading}
                     />
                   </label>
                   <p className="text-xs text-gray-400 mt-2">
@@ -610,8 +681,7 @@ export default function NewUserPage() {
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="Ej: juan@email.com"
-                className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white ${validationErrors.email ? "border-red-300 bg-red-50" : "border-gray-200"
-                  }`}
+                className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white ${validationErrors.email ? "border-red-300 bg-red-50" : "border-gray-200"}`}
               />
               {validationErrors.email && (
                 <p className="text-xs text-red-500 mt-1">{validationErrors.email}</p>
@@ -631,8 +701,7 @@ export default function NewUserPage() {
                 value={formData.identification}
                 onChange={handleChange}
                 placeholder="Ej: 1234567890"
-                className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white ${validationErrors.identification ? "border-red-300 bg-red-50" : "border-gray-200"
-                  }`}
+                className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white ${validationErrors.identification ? "border-red-300 bg-red-50" : "border-gray-200"}`}
               />
               {validationErrors.identification && (
                 <p className="text-xs text-red-500 mt-1">{validationErrors.identification}</p>
@@ -656,8 +725,7 @@ export default function NewUserPage() {
                 value={formData.password}
                 onChange={handleChange}
                 placeholder="Mínimo 6 caracteres"
-                className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white ${validationErrors.password ? "border-red-300 bg-red-50" : "border-gray-200"
-                  }`}
+                className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white ${validationErrors.password ? "border-red-300 bg-red-50" : "border-gray-200"}`}
               />
               {validationErrors.password && (
                 <p className="text-xs text-red-500 mt-1">{validationErrors.password}</p>
@@ -725,7 +793,7 @@ export default function NewUserPage() {
               </Link>
               <button
                 type="submit"
-                disabled={loading || uploading}
+                disabled={loading}
                 className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white rounded-xl hover:shadow-xl transition-all duration-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
@@ -776,8 +844,7 @@ export default function NewUserPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Rol:</span>
-                  <span className={`font-medium ${createdUser.role === "admin" ? "text-purple-600" : "text-blue-600"
-                    }`}>
+                  <span className={`font-medium ${createdUser.role === "admin" ? "text-purple-600" : "text-blue-600"}`}>
                     {createdUser.role === "admin" ? "Administrador" : "Usuario Regular"}
                   </span>
                 </div>

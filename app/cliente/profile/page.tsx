@@ -5,12 +5,10 @@ import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import {
   User,
   Mail,
-  Phone,
-  CreditCard,  // ← Cambiado de IdCard a CreditCard
+  CreditCard,
   Lock,
   Camera,
   Loader2,
@@ -22,7 +20,6 @@ import {
   EyeOff,
   Shield,
   Calendar,
-  Badge,       // ← Opcional: para identificación
 } from "lucide-react";
 
 type UserData = {
@@ -125,6 +122,16 @@ export default function ProfilePage() {
   const uploadPhoto = async () => {
     if (!photoFile) return;
 
+    // ✅ Verificar que tenemos el userId
+    const userId = session?.user?.id || userData?.id;
+    
+    if (!userId) {
+      setError("No se pudo obtener el ID del usuario. Por favor, recarga la página.");
+      return;
+    }
+
+    console.log("📸 Subiendo foto para usuario:", userId);
+
     setUploading(true);
     setError("");
     setSuccess("");
@@ -133,26 +140,34 @@ export default function ProfilePage() {
       const formData = new FormData();
       formData.append("file", photoFile);
       formData.append("type", "user-photo");
-      formData.append("userId", userData?.id || "");
+      formData.append("userId", userId); // ✅ Enviar userId correctamente
 
       const response = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Error al subir la foto");
+      // ✅ Manejar la respuesta de forma segura
+      let responseData;
+      const textResponse = await response.text();
+      
+      try {
+        responseData = JSON.parse(textResponse);
+      } catch (parseError) {
+        console.error("Error al parsear respuesta:", textResponse);
+        throw new Error("Error en el servidor al procesar la imagen");
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(responseData.error || "Error al subir la foto");
+      }
 
-      // Actualizar la sesión del usuario
+      // ✅ Actualizar la sesión del usuario
       await update({
         ...session,
         user: {
           ...session?.user,
-          photo: data.url,
+          photo: responseData.url,
         },
       });
 
