@@ -4,9 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 
+// ✅ CORRECTO para Next.js 15+ - params es una Promise
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -17,7 +18,8 @@ export async function GET(
       );
     }
 
-    const { id } = params;
+    // ✅ Esperar a que params se resuelva
+    const { id } = await params;
 
     const book = await prisma.book.findUnique({
       where: { id },

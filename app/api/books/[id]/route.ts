@@ -1,3 +1,4 @@
+// api/books/[id]/available-copies/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
