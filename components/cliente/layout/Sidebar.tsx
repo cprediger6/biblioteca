@@ -21,6 +21,7 @@ import {
     X
 } from "lucide-react";
 
+// components/cliente/layout/Sidebar.tsx
 const menu = [
     {
         icon: LayoutDashboard,
@@ -40,7 +41,7 @@ const menu = [
     {
         icon: Bookmark,
         label: "Reservas",
-        href: "/cliente/reservas"  // ← Ruta correcta
+        href: "/cliente/reservas"
     },
     {
         icon: History,
@@ -50,7 +51,7 @@ const menu = [
     {
         icon: CreditCard,
         label: "Pagos",
-        href: "/cliente/payments"
+        href: "/cliente/payments"  // ✅ Ya existe
     },
     {
         icon: UserCircle,

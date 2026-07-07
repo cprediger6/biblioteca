@@ -1,13 +1,13 @@
 // app/admin/books/page.tsx
 import { prisma } from "@/lib/prisma";
-import Barcode from "@/components/Barcode";
 import Link from "next/link";
+import { StatusBadge } from "@/components/StatusBadge";
 import { 
   Plus, Search, BookOpen, Copy, Edit, Trash2, Eye, 
-  TrendingUp, Filter, Image as ImageIcon, Barcode as BarcodeIcon
+  TrendingUp, Filter, Image as ImageIcon, Barcode as BarcodeIcon,
+  Clock, CheckCircle, XCircle
 } from "lucide-react";
 
-// Definir tipos
 type BookWithCopies = {
   id: string;
   title: string;
@@ -22,7 +22,7 @@ type BookWithCopies = {
   updatedAt: Date;
   copies: {
     id: string;
-    code: string; // Asegurarse de que existe
+    code: string;
     status: string;
     location: string | null;
     bookId: string;
@@ -34,14 +34,40 @@ type BookWithCopies = {
   };
 };
 
-type CopyStatus = {
-  status: string;
+// Función para obtener el color según el estado
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'available': return 'bg-green-500';
+    case 'loaned': return 'bg-yellow-500';
+    case 'reserved': return 'bg-purple-500';  // Cambiado a morado
+    case 'overdue': return 'bg-red-500';
+    default: return 'bg-gray-400';
+  }
+};
+const getStatusBgColor = (status: string) => {
+  switch (status) {
+    case 'available': return 'bg-green-50 border-green-200';
+    case 'loaned': return 'bg-yellow-50 border-yellow-200';
+    case 'reserved': return 'bg-purple-50 border-purple-200';  // Morado claro
+    case 'overdue': return 'bg-red-50 border-red-200';
+    default: return 'bg-gray-50 border-gray-200';
+  }
+};
+
+const getStatusLabel = (status: string) => {
+  switch (status) {
+    case 'available': return 'Disponible';
+    case 'loaned': return 'Prestado';
+    case 'reserved': return 'Reservado';
+    case 'overdue': return 'Vencido';
+    default: return 'Desconocido';
+  }
 };
 
 export default async function BooksPage() {
   const books: BookWithCopies[] = await prisma.book.findMany({
     include: {
-      copies: true, // Incluir todas las columnas de Copy
+      copies: true,
       _count: {
         select: {
           copies: true,
@@ -53,14 +79,23 @@ export default async function BooksPage() {
     },
   });
 
-  const availableCopies = (copies: CopyStatus[]) => {
+  // Funciones de conteo actualizadas
+  const availableCopies = (copies: any[]) => {
     return copies.filter(c => c.status === "available").length;
+  };
+
+  const reservedCopies = (copies: any[]) => {
+    return copies.filter(c => c.status === "reserved").length;
+  };
+
+  const loanedCopies = (copies: any[]) => {
+    return copies.filter(c => c.status === "loaned" || c.status === "overdue").length;
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
-        {/* Header con gradiente */}
+        {/* Header */}
         <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl sm:rounded-3xl p-6 sm:p-8 mb-6 sm:mb-8 text-white shadow-2xl">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
@@ -117,13 +152,18 @@ export default async function BooksPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
             {books.map((book: BookWithCopies) => {
               const available = availableCopies(book.copies);
+              const reserved = reservedCopies(book.copies);
+              const loaned = loanedCopies(book.copies);
               const total = book._count.copies;
               const availability = total > 0 ? Math.round((available / total) * 100) : 0;
+              const hasReserved = reserved > 0;
               
               return (
                 <div
                   key={book.id}
-                  className="bg-white rounded-xl sm:rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden group"
+                  className={`bg-white rounded-xl sm:rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden group
+                    ${hasReserved ? 'border-2 border-blue-300' : 'border border-gray-200'}
+                  `}
                 >
                   {/* Cover con imagen o placeholder */}
                   <div className="h-40 sm:h-48 bg-gradient-to-br from-gray-100 to-gray-200 relative">
@@ -144,6 +184,14 @@ export default async function BooksPage() {
                       <Copy className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                       <span>{total}</span>
                     </div>
+
+                    {/* Badge de reservas */}
+                    {hasReserved && (
+                      <div className="absolute top-2 sm:top-3 left-2 sm:left-3 bg-blue-500/90 backdrop-blur-sm px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold text-white shadow-lg flex items-center space-x-1">
+                        <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                        <span>{reserved} reservado(s)</span>
+                      </div>
+                    )}
 
                     {/* Badge de imagen si tiene portada */}
                     {book.coverImage && (
@@ -174,6 +222,22 @@ export default async function BooksPage() {
                       )}
                     </div>
 
+                    {/* Estadísticas de ejemplares - CORREGIDO */}
+                    <div className="grid grid-cols-3 gap-1 mb-3 sm:mb-4">
+                      <div className={`text-center rounded-lg p-1.5 sm:p-2 ${available > 0 ? 'bg-green-50' : 'bg-gray-50'}`}>
+                        <p className="text-xs sm:text-sm font-bold text-green-600">{available}</p>
+                        <p className="text-[8px] sm:text-[10px] text-gray-500">Disponibles</p>
+                      </div>
+                      <div className={`text-center rounded-lg p-1.5 sm:p-2 ${reserved > 0 ? 'bg-blue-50' : 'bg-gray-50'}`}>
+                        <p className="text-xs sm:text-sm font-bold text-blue-600">{reserved}</p>
+                        <p className="text-[8px] sm:text-[10px] text-gray-500">Reservados</p>
+                      </div>
+                      <div className={`text-center rounded-lg p-1.5 sm:p-2 ${loaned > 0 ? 'bg-yellow-50' : 'bg-gray-50'}`}>
+                        <p className="text-xs sm:text-sm font-bold text-yellow-600">{loaned}</p>
+                        <p className="text-[8px] sm:text-[10px] text-gray-500">Prestados</p>
+                      </div>
+                    </div>
+
                     {/* Barra de disponibilidad */}
                     <div className="mb-3 sm:mb-4">
                       <div className="flex justify-between text-[10px] sm:text-xs text-gray-500 mb-1">
@@ -199,7 +263,7 @@ export default async function BooksPage() {
                       </div>
                     </div>
 
-                    {/* Códigos de los ejemplares */}
+                    {/* Códigos de los ejemplares con estado - CORREGIDO */}
                     {book.copies.length > 0 && (
                       <div className="mb-3 sm:mb-4">
                         <div className="flex items-center gap-1 text-[10px] sm:text-xs text-gray-500 mb-1.5">
@@ -207,24 +271,24 @@ export default async function BooksPage() {
                           <span className="font-medium">Ejemplares:</span>
                         </div>
                         <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                          {book.copies.map((copy) => (
-                            <div 
-                              key={copy.id} 
-                              className="bg-gray-50 border border-gray-200 rounded-lg px-1.5 sm:px-2 py-0.5 sm:py-1 flex items-center gap-1"
-                              title={`Estado: ${copy.status}`}
-                            >
-                              <span className="text-[8px] sm:text-[10px] font-mono text-gray-600 truncate max-w-[60px] sm:max-w-[80px]">
-                                {copy.code && copy.code !== 'undefined' ? copy.code : copy.id.slice(0, 8)}
-                              </span>
-                              <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
-                                copy.status === 'available' ? 'bg-green-500' :
-                                copy.status === 'loaned' ? 'bg-yellow-500' :
-                                copy.status === 'overdue' ? 'bg-red-500' :
-                                'bg-gray-400'
-                              }`} />
-                            </div>
-                          ))}
-                        </div>
+  {book.copies.map((copy) => (
+    <div 
+      key={copy.id} 
+      className={`border rounded-lg px-1.5 sm:px-2 py-0.5 sm:py-1 flex items-center gap-1
+        ${copy.status === 'available' ? 'bg-green-50 border-green-200' : ''}
+        ${copy.status === 'reserved' ? 'bg-purple-50 border-purple-200' : ''}
+        ${copy.status === 'loaned' ? 'bg-yellow-50 border-yellow-200' : ''}
+        ${copy.status === 'overdue' ? 'bg-red-50 border-red-200' : ''}
+      `}
+      title={`Estado: ${getStatusLabel(copy.status)} - Código: ${copy.code}`}
+    >
+      <span className="text-[8px] sm:text-[10px] font-mono text-gray-600 truncate max-w-[60px] sm:max-w-[80px]">
+        {copy.code && copy.code !== 'undefined' ? copy.code : copy.id.slice(0, 8)}
+      </span>
+      <StatusBadge status={copy.status as any} size="sm" showLabel={false} />
+    </div>
+  ))}
+</div>
                       </div>
                     )}
 

@@ -31,6 +31,8 @@ model User {
   notifications  Notification[]
   accounts       Account[]
   sessions       Session[]
+  payments       Payment[]
+  favorites      Favorite[]
 }
 
 model Account {
@@ -88,6 +90,7 @@ model Book {
   // Relaciones
   copies        Copy[]
   reservations  Reservation[]
+  favorites     Favorite[]
 }
 
 model Copy {
@@ -163,4 +166,39 @@ model Notification {
   
   // Relaciones
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+// ============================================
+// NUEVO MODELO PARA PAGOS
+// ============================================
+
+model Payment {
+  id          String   @id @default(cuid())
+  userId      String
+  amount      Float
+  method      String   // credit_card, debit_card, cash, bank_transfer
+  status      String   @default("pending") // pending, completed, failed, refunded
+  reference   String   @unique
+  description String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relaciones
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  bookId    String
+  createdAt DateTime @default(now())
+
+  // Relaciones
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookId])
+  @@index([userId])
+  @@index([bookId])
 }

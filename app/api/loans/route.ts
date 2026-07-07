@@ -110,7 +110,7 @@ export async function POST(request: Request) {
     }
     if (copy.status !== "available") {
       return NextResponse.json(
-        { error: "El ejemplar no está disponible" },
+        { error: `El ejemplar no está disponible. Estado actual: ${copy.status}` },
         { status: 400 }
       );
     }
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
       },
     });
 
-    // Actualizar el estado del ejemplar
+    // Actualizar el estado del ejemplar a "loaned"
     await prisma.copy.update({
       where: { id: copyId },
       data: { status: "loaned" },
@@ -143,6 +143,90 @@ export async function POST(request: Request) {
     console.error("Error creating loan:", error);
     return NextResponse.json(
       { error: "Error al crear préstamo" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE - Marcar préstamo como devuelto
+// app/api/reservations/route.ts (añadir el DELETE para clientes)
+// Este ya lo tienes en el archivo principal, pero asegúrate de que esté así:
+
+// DELETE - Cancelar una reserva (cliente)
+export async function DELETE(request: Request) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        { error: "No autorizado" },
+        { status: 401 }
+      );
+    }
+
+    const { searchParams } = new URL(request.url);
+    const reservationId = searchParams.get("id");
+
+    if (!reservationId) {
+      return NextResponse.json(
+        { error: "ID de reserva requerido" },
+        { status: 400 }
+      );
+    }
+
+    // Verificar que la reserva existe y pertenece al usuario
+    const reservation = await prisma.reservation.findFirst({
+      where: {
+        id: reservationId,
+        userId: session.user.id,
+      },
+      include: {
+        book: {
+          include: {
+            copies: true,
+          },
+        },
+      },
+    });
+
+    if (!reservation) {
+      return NextResponse.json(
+        { error: "Reserva no encontrada" },
+        { status: 404 }
+      );
+    }
+
+    // Si la reserva estaba "fulfilled", liberar el ejemplar
+    if (reservation.status === "fulfilled") {
+      const reservedCopy = reservation.book.copies.find(c => c.status === "reserved");
+      
+      if (reservedCopy) {
+        await prisma.copy.update({
+          where: { id: reservedCopy.id },
+          data: { status: "available" },
+        });
+      }
+    }
+
+    // Solo permitir cancelar reservas que no estén fulfilled (aprobadas)
+    if (reservation.status === "fulfilled") {
+      return NextResponse.json(
+        { error: "No se puede cancelar una reserva ya aprobada" },
+        { status: 400 }
+      );
+    }
+
+    await prisma.reservation.delete({
+      where: { id: reservationId },
+    });
+
+    return NextResponse.json(
+      { message: "Reserva cancelada exitosamente" },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("Error canceling reservation:", error);
+    return NextResponse.json(
+      { error: "Error al cancelar la reserva" },
       { status: 500 }
     );
   }

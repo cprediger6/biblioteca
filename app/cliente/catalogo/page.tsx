@@ -2,6 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { ReserveButton } from "@/components/ReserveButton";
 import Link from "next/link";
+import { FavoriteButton } from "@/components/FavoriteButton";
 import {
   BookOpen,
   Eye,
@@ -135,8 +136,13 @@ function BookRow({
 
                 <div className="space-y-2.5">
                   {/* Botón de reserva - ya incluye el texto y la lógica completa */}
-                  <ReserveButton bookId={book.id} />
-
+                
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <ReserveButton bookId={book.id} />
+                  </div>
+                  <FavoriteButton bookId={book.id} className="flex-shrink-0" />
+                </div>
                   {/* Botón para ver detalle del libro */}
                   <Link
                     href={`/cliente/libro/${book.id}`}

@@ -16,20 +16,37 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || "";
-    const available = searchParams.get("available") === "true";
+    const status = searchParams.get("status");
+    const bookId = searchParams.get("bookId");
+    const exclude = searchParams.get("exclude")?.split(',') || [];
 
-    let where: any = {};
-    
-    if (available) {
-      where.status = "available";
+    const where: any = {};
+
+    // Filtrar por bookId
+    if (bookId) {
+      where.bookId = bookId;
     }
-    
+
+    // Filtrar por estado
+    if (status) {
+      where.status = status;
+    }
+
+    // Excluir estados específicos
+    if (exclude.length > 0) {
+      where.status = {
+        notIn: exclude,
+      };
+    }
+
+    // Búsqueda por libro
     if (search) {
-      where.OR = [
-        { code: { contains: search, mode: "insensitive" } },
-        { book: { title: { contains: search, mode: "insensitive" } } },
-        { book: { author: { contains: search, mode: "insensitive" } } },
-      ];
+      where.book = {
+        OR: [
+          { title: { contains: search, mode: "insensitive" } },
+          { author: { contains: search, mode: "insensitive" } },
+        ],
+      };
     }
 
     const copies = await prisma.copy.findMany({
@@ -40,14 +57,13 @@ export async function GET(request: Request) {
             id: true,
             title: true,
             author: true,
-            isbn: true,
           },
         },
       },
       take: 20,
       orderBy: {
         book: {
-          title: 'asc',
+          title: "asc",
         },
       },
     });

@@ -75,17 +75,20 @@ export default function NewLoanPage() {
     }
   };
 
-  const searchCopies = async () => {
-    try {
-      const res = await fetch(`/api/copies?search=${searchCopy}&available=true`);
-      if (!res.ok) throw new Error("Error al buscar ejemplares");
-      const data = await res.json();
-      setCopies(data.copies || []);
-      setShowCopyResults(true);
-    } catch (error) {
-      console.error("Error:", error);
-    }
-  };
+  // app/admin/loans/new/page.tsx - Actualizar búsqueda
+const searchCopies = async () => {
+  try {
+    // Buscar SOLO ejemplares disponibles (NO reservados)
+    const res = await fetch(`/api/copies?search=${searchCopy}&status=available`);
+    if (!res.ok) throw new Error("Error al buscar ejemplares");
+    const data = await res.json();
+    // Solo mostrar ejemplares disponibles (excluye reservados automáticamente)
+    setCopies(data.copies || []);
+    setShowCopyResults(true);
+  } catch (error) {
+    console.error("Error:", error);
+  }
+};
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
