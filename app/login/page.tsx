@@ -211,13 +211,7 @@ export default function LoginPage() {
             )}
           </button>
 
-          {/* Enlace a registro */}
-          <p className="text-center text-sm text-gray-500 mt-4">
-            ¿No tienes cuenta?{" "}
-            <Link href="/register" className="text-indigo-600 hover:text-indigo-700 font-medium">
-              Regístrate aquí
-            </Link>
-          </p>
+          
         </form>
 
         {/* Datos de prueba */}
