@@ -6,11 +6,11 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Mail, Lock, Loader2, Eye, EyeOff, Users, Library } from "lucide-react";
-
+import Image from "next/image";
 export default function LoginPage() {
   const router = useRouter();
   const [roleParam, setRoleParam] = useState<string | null>(null);
-  
+
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -49,7 +49,7 @@ export default function LoginPage() {
       // Obtener el rol del usuario desde la sesión
       const response = await fetch("/api/auth/session");
       const session = await response.json();
-      
+
       const userRole = session?.user?.role || "user";
 
       // Verificar que el rol coincida con el seleccionado
@@ -89,10 +89,18 @@ export default function LoginPage() {
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8">
         {/* Logo y título */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl">📚</span>
+          <div className="relative mx-auto w-44 sm:w-48 md:w-48 lg:w-64 h-12 sm:h-18 md:h-20">
+            <Image
+              src="/title3.png"
+              alt="Biblioteca+"
+              fill
+              className="object-contain"
+              priority
+            />
           </div>
+
           <h1 className="text-2xl font-bold text-gray-800">Bienvenido</h1>
+
           <p className="text-gray-500 text-sm mt-1">
             Inicia sesión para continuar
           </p>
@@ -103,36 +111,30 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => setSelectedRole("user")}
-            className={`p-4 rounded-xl border-2 transition-all ${
-              selectedRole === "user"
-                ? "border-blue-500 bg-blue-50"
-                : "border-gray-200 hover:border-gray-300"
-            }`}
+            className={`p-4 rounded-xl border-2 transition-all ${selectedRole === "user"
+              ? "border-blue-500 bg-blue-50"
+              : "border-gray-200 hover:border-gray-300"
+              }`}
           >
-            <Users className={`w-6 h-6 mx-auto mb-1 ${
-              selectedRole === "user" ? "text-blue-500" : "text-gray-400"
-            }`} />
-            <p className={`text-sm font-medium ${
-              selectedRole === "user" ? "text-blue-600" : "text-gray-600"
-            }`}>
+            <Users className={`w-6 h-6 mx-auto mb-1 ${selectedRole === "user" ? "text-blue-500" : "text-gray-400"
+              }`} />
+            <p className={`text-sm font-medium ${selectedRole === "user" ? "text-blue-600" : "text-gray-600"
+              }`}>
               Cliente
             </p>
           </button>
           <button
             type="button"
             onClick={() => setSelectedRole("admin")}
-            className={`p-4 rounded-xl border-2 transition-all ${
-              selectedRole === "admin"
-                ? "border-purple-500 bg-purple-50"
-                : "border-gray-200 hover:border-gray-300"
-            }`}
+            className={`p-4 rounded-xl border-2 transition-all ${selectedRole === "admin"
+              ? "border-purple-500 bg-purple-50"
+              : "border-gray-200 hover:border-gray-300"
+              }`}
           >
-            <Library className={`w-6 h-6 mx-auto mb-1 ${
-              selectedRole === "admin" ? "text-purple-500" : "text-gray-400"
-            }`} />
-            <p className={`text-sm font-medium ${
-              selectedRole === "admin" ? "text-purple-600" : "text-gray-600"
-            }`}>
+            <Library className={`w-6 h-6 mx-auto mb-1 ${selectedRole === "admin" ? "text-purple-500" : "text-gray-400"
+              }`} />
+            <p className={`text-sm font-medium ${selectedRole === "admin" ? "text-purple-600" : "text-gray-600"
+              }`}>
               Biblioteca
             </p>
           </button>
@@ -211,11 +213,11 @@ export default function LoginPage() {
             )}
           </button>
 
-          
+
         </form>
 
         {/* Datos de prueba */}
-        
+
       </div>
     </div>
   );
