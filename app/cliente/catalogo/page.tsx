@@ -15,7 +15,6 @@ import {
   Filter,
 } from "lucide-react";
 
-// Definir el tipo de libro según la estructura de la tabla
 type Book = {
   id: string;
   title: string;
@@ -30,7 +29,7 @@ type Book = {
   updatedAt: Date;
 };
 
-// Componente para una fila de libros
+// Componente para una fila de libros (sin cambios)
 function BookRow({
   title,
   icon,
@@ -40,9 +39,11 @@ function BookRow({
   icon: React.ReactNode;
   books: Book[];
 }) {
+  // Si no hay libros, no mostrar la fila
+  if (books.length === 0) return null;
+
   return (
     <div className="mb-12">
-      {/* Encabezado de la fila */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl">
@@ -58,7 +59,6 @@ function BookRow({
         </button>
       </div>
 
-      {/* Fila horizontal con scroll */}
       <div className="flex gap-6 overflow-x-auto pb-6 scrollbar-hide snap-x snap-mandatory">
         {books.map((book) => {
           const colors = [
@@ -98,7 +98,6 @@ function BookRow({
                 )}
               </div>
 
-              {/* Info siempre visible abajo */}
               <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-white via-white/95 to-transparent">
                 <h3 className="font-bold text-gray-800 text-sm truncate">
                   {book.title}
@@ -106,7 +105,6 @@ function BookRow({
                 <p className="text-xs text-gray-500 truncate">{book.author}</p>
               </div>
 
-              {/* Overlay al hacer hover */}
               <div className="absolute inset-0 bg-white/95 backdrop-blur-sm p-5 flex flex-col justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                 <div>
                   <h3 className="font-bold text-gray-800 text-base line-clamp-2">
@@ -135,18 +133,15 @@ function BookRow({
                 </div>
 
                 <div className="space-y-2.5">
-                  {/* Botón de reserva - ya incluye el texto y la lógica completa */}
-
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <ReserveButton bookId={book.id} />
                     </div>
                     <FavoriteButton bookId={book.id} className="flex-shrink-0" />
                   </div>
-                  {/* Botón para ver detalle del libro */}
                   <Link
                     href={`/cliente/libro/${book.id}`}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition text-sm"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition text-sm w-full justify-center"
                   >
                     <Eye className="w-4 h-4" />
                     Ver detalles
@@ -161,10 +156,31 @@ function BookRow({
   );
 }
 
-// Server Component - Obtiene los datos directamente desde la BD
-export default async function CatalogoPage() {
-  // Obtener todos los libros desde la base de datos
+// Server Component con searchParams
+export default async function CatalogoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ search?: string }>;
+}) {
+  const params = await searchParams;
+  const searchTerm = params.search?.trim() || "";
+
+  // Construir el filtro de búsqueda
+  let whereClause = {};
+  if (searchTerm) {
+    whereClause = {
+      OR: [
+        { title: { contains: searchTerm, mode: "insensitive" } },
+        { author: { contains: searchTerm, mode: "insensitive" } },
+        { isbn: { contains: searchTerm, mode: "insensitive" } },
+        { publisher: { contains: searchTerm, mode: "insensitive" } },
+      ],
+    };
+  }
+
+  // Obtener todos los libros (filtrados si hay búsqueda)
   const allBooks = await prisma.book.findMany({
+    where: whereClause,
     orderBy: {
       createdAt: "desc",
     },
@@ -180,18 +196,94 @@ export default async function CatalogoPage() {
               <BookOpen className="w-12 h-12 text-gray-400" />
             </div>
             <h2 className="text-2xl font-bold text-gray-700 mb-2">
-              No hay libros disponibles
+              {searchTerm ? "No se encontraron libros" : "No hay libros disponibles"}
             </h2>
             <p className="text-gray-400">
-              Pronto agregaremos nuevos títulos al catálogo.
+              {searchTerm
+                ? `No hay resultados para "${searchTerm}"`
+                : "Pronto agregaremos nuevos títulos al catálogo."}
             </p>
+            {searchTerm && (
+              <Link
+                href="/cliente/catalogo"
+                className="inline-block mt-4 px-6 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition"
+              >
+                Limpiar búsqueda
+              </Link>
+            )}
           </div>
         </div>
       </div>
     );
   }
 
-  // Dividir los libros en diferentes secciones
+  // Si hay búsqueda, mostrar solo una sección con los resultados
+  if (searchTerm) {
+    return (
+      <div className="min-h-screen bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Encabezado con búsqueda */}
+          <div className="relative overflow-hidden rounded-3xl p-6 sm:p-10 mb-8 bg-gradient-to-r from-indigo-600 via-purple-600 to-blue-600 shadow-2xl">
+            <div className="absolute top-0 right-0 w-72 h-72 bg-white/10 blur-3xl rounded-full" />
+            <div className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 blur-2xl rounded-full" />
+
+            <div className="relative">
+              <div className="flex flex-col md:flex-row justify-between gap-6">
+                <div>
+                  <h1 className="text-3xl sm:text-4xl font-bold text-white">
+                    🔍 Resultados de búsqueda
+                  </h1>
+                  <p className="text-white/80 mt-2 text-sm sm:text-base">
+                    {allBooks.length} libro{allBooks.length !== 1 ? "s" : ""} encontrado{allBooks.length !== 1 ? "s" : ""} para "{searchTerm}"
+                  </p>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Link
+                      href="/cliente/catalogo"
+                      className="bg-white/10 backdrop-blur px-4 py-1.5 rounded-full text-xs text-white/90 hover:bg-white/20 transition"
+                    >
+                      ✕ Limpiar búsqueda
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mantener la barra de búsqueda */}
+              <div className="mt-6 max-w-2xl">
+                <form action="/cliente/catalogo" method="GET" className="relative group">
+                  <div className="absolute inset-0 bg-white/20 blur-xl rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="relative flex items-center bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 hover:border-white/40 transition-all shadow-lg">
+                    <Search className="absolute left-4 w-5 h-5 text-white/60" />
+                    <input
+                      type="text"
+                      name="search"
+                      defaultValue={searchTerm}
+                      placeholder="Buscar por título, autor o género..."
+                      className="w-full bg-transparent text-white placeholder-white/60 pl-12 pr-4 py-3.5 rounded-2xl outline-none text-sm font-medium"
+                    />
+                    <button
+                      type="submit"
+                      className="mr-1.5 px-5 py-2 bg-white text-indigo-600 rounded-xl text-sm font-semibold hover:bg-white/90 transition shadow-lg hover:shadow-xl"
+                    >
+                      Buscar
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          {/* Mostrar resultados en una sola fila */}
+          <BookRow
+            title={`📖 Resultados (${allBooks.length})`}
+            icon={<Search size={20} className="text-indigo-500" />}
+            books={allBooks}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Sin búsqueda, mostrar las secciones normales
   const tendencias = allBooks.slice(0, 8);
   const shuffled = [...allBooks].sort(() => Math.random() - 0.5);
   const recomendados = shuffled.slice(0, 8);
@@ -237,25 +329,30 @@ export default async function CatalogoPage() {
               </div>
             </div>
 
-            {/* Barra de búsqueda */}
+            {/* Barra de búsqueda con formulario */}
             <div className="mt-6 max-w-2xl">
-              <div className="relative group">
+              <form action="/cliente/catalogo" method="GET" className="relative group">
                 <div className="absolute inset-0 bg-white/20 blur-xl rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                 <div className="relative flex items-center bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 hover:border-white/40 transition-all shadow-lg">
                   <Search className="absolute left-4 w-5 h-5 text-white/60" />
                   <input
                     type="text"
+                    name="search"
+                    defaultValue={searchTerm}
                     placeholder="Buscar por título, autor o género..."
                     className="w-full bg-transparent text-white placeholder-white/60 pl-12 pr-4 py-3.5 rounded-2xl outline-none text-sm font-medium"
                   />
-                  <button className="mr-1.5 px-5 py-2 bg-white text-indigo-600 rounded-xl text-sm font-semibold hover:bg-white/90 transition shadow-lg hover:shadow-xl">
+                  <button
+                    type="submit"
+                    className="mr-1.5 px-5 py-2 bg-white text-indigo-600 rounded-xl text-sm font-semibold hover:bg-white/90 transition shadow-lg hover:shadow-xl"
+                  >
                     Buscar
                   </button>
                 </div>
                 <p className="text-white/50 text-xs mt-2 ml-1">
                   🔍 Prueba buscando "Cien años de soledad" o "Gabriel García Márquez"
                 </p>
-              </div>
+              </form>
             </div>
           </div>
         </div>

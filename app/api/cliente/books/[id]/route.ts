@@ -4,10 +4,11 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   request: NextRequest,
-  context: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await context.params;
+    // ✅ Resolver params con await
+    const { id } = await params;
 
     if (!id) {
       return NextResponse.json(
@@ -76,7 +77,7 @@ export async function GET(
   } catch (error) {
     console.error("Error al obtener el libro:", error);
     return NextResponse.json(
-      {
+      { 
         error: "Error al obtener los detalles del libro",
         details: error instanceof Error ? error.message : "Error desconocido"
       },

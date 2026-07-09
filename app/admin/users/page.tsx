@@ -5,7 +5,7 @@ import PrintCarnetButton from "@/components/PrintCarnetButton";
 import { 
   Plus, Search, Filter, User, Mail, Phone, 
   Calendar, Edit, Trash2,
-  Users, UserCheck, Crown, Download
+  Users, UserCheck, Crown, Download, X
 } from "lucide-react";
 import DeleteUserButton from "@/components/DeleteUserButton";
 import { getServerSession } from "next-auth";
@@ -27,14 +27,41 @@ type UserWithCounts = {
   };
 };
 
-export default async function UsersPage() {
+interface SearchParams {
+  search?: string;
+}
+
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<SearchParams>;
+}) {
   // Verificar autenticación y rol
   const session = await getServerSession(authOptions);
   if (!session || session.user?.role !== "admin") {
     redirect("/login");
   }
 
+  // Obtener parámetros de búsqueda
+  const params = await searchParams;
+  const searchTerm = params.search?.trim() || "";
+
+  // Construir condiciones de búsqueda
+  let whereClause = {};
+  
+  if (searchTerm) {
+    whereClause = {
+      OR: [
+        { name: { contains: searchTerm, mode: 'insensitive' } },
+        { email: { contains: searchTerm, mode: 'insensitive' } },
+        { identification: { contains: searchTerm, mode: 'insensitive' } },
+        { phone: { contains: searchTerm, mode: 'insensitive' } },
+      ],
+    };
+  }
+
   const users = await prisma.user.findMany({
+    where: whereClause,
     select: {
       id: true,
       name: true,
@@ -56,11 +83,23 @@ export default async function UsersPage() {
     },
   });
 
-  // Estadísticas
-  const totalUsers = users.length;
-  const adminUsers = users.filter(u => u.role === "admin").length;
-  const regularUsers = users.filter(u => u.role === "user").length;
-  const usersWithLoans = users.filter(u => u._count.loans > 0).length;
+  // Estadísticas (siempre basadas en todos los usuarios, no solo los filtrados)
+  const allUsers = await prisma.user.findMany({
+    select: {
+      id: true,
+      role: true,
+      _count: {
+        select: {
+          loans: true,
+        },
+      },
+    },
+  });
+
+  const totalUsers = allUsers.length;
+  const adminUsers = allUsers.filter(u => u.role === "admin").length;
+  const regularUsers = allUsers.filter(u => u.role === "user").length;
+  const usersWithLoans = allUsers.filter(u => u._count.loans > 0).length;
 
   const getRoleBadge = (role: string) => {
     if (role === "admin") {
@@ -148,19 +187,48 @@ export default async function UsersPage() {
         </div>
 
         {/* Barra de búsqueda */}
-        <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 mb-6 sm:mb-8 flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
-          <div className="flex-1 relative w-full">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
-            <input
-              type="text"
-              placeholder="Buscar usuarios por nombre o email..."
-              className="w-full pl-9 sm:pl-10 pr-3 sm:pr-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white"
-            />
-          </div>
-          <button className="px-3 sm:px-4 py-2.5 sm:py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors flex items-center space-x-2 w-full sm:w-auto justify-center text-sm sm:text-base">
-            <Filter className="w-4 h-4" />
-            <span>Filtros</span>
-          </button>
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 mb-6 sm:mb-8">
+          <form action="/admin/users" method="GET" className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
+            <div className="flex-1 relative w-full">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 sm:w-5 sm:h-5" />
+              <input
+                type="text"
+                name="search"
+                defaultValue={searchTerm}
+                placeholder="Buscar por nombre, email, identificación o teléfono..."
+                className="w-full pl-9 sm:pl-10 pr-3 sm:pr-4 py-2.5 sm:py-3 text-sm sm:text-base border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white"
+              />
+            </div>
+            <div className="flex gap-2 w-full sm:w-auto">
+              <button
+                type="submit"
+                className="flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition flex items-center justify-center gap-2 text-sm sm:text-base"
+              >
+                <Search className="w-4 h-4" />
+                <span>Buscar</span>
+              </button>
+              {searchTerm && (
+                <Link
+                  href="/admin/users"
+                  className="flex-1 sm:flex-none px-4 py-2.5 sm:py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition flex items-center justify-center gap-2 text-sm sm:text-base"
+                >
+                  <X className="w-4 h-4" />
+                  <span>Limpiar</span>
+                </Link>
+              )}
+            </div>
+          </form>
+          
+          {/* Indicador de resultados */}
+          {searchTerm && (
+            <div className="mt-3 text-sm text-gray-500 border-t border-gray-100 pt-3">
+              {users.length === 0 ? (
+                <span className="text-red-500">❌ No se encontraron usuarios para "<strong>{searchTerm}</strong>"</span>
+              ) : (
+                <span className="text-green-600">✅ Se encontraron <strong>{users.length}</strong> usuarios para "<strong>{searchTerm}</strong>"</span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Lista de usuarios */}
@@ -168,135 +236,157 @@ export default async function UsersPage() {
           <div className="bg-white rounded-2xl sm:rounded-3xl shadow-lg p-8 sm:p-12 text-center">
             <div className="text-5xl sm:text-6xl mb-3 sm:mb-4">👥</div>
             <h3 className="text-xl sm:text-2xl font-bold text-gray-700 mb-2">
-              No hay usuarios registrados
+              {searchTerm ? "No se encontraron usuarios" : "No hay usuarios registrados"}
             </h3>
             <p className="text-sm sm:text-base text-gray-500 mb-4 sm:mb-6">
-              Comienza a registrar usuarios en tu biblioteca
+              {searchTerm 
+                ? `No hay usuarios que coincidan con "${searchTerm}"` 
+                : "Comienza a registrar usuarios en tu biblioteca"}
             </p>
-            <Link
-              href="/admin/users/new"
-              className="inline-flex items-center space-x-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl hover:shadow-xl transition-all duration-200 text-sm sm:text-base"
-            >
-              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>Crear primer usuario</span>
-            </Link>
+            {searchTerm ? (
+              <Link
+                href="/admin/users"
+                className="inline-flex items-center space-x-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl hover:shadow-xl transition-all duration-200 text-sm sm:text-base"
+              >
+                <Search className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>Limpiar búsqueda</span>
+              </Link>
+            ) : (
+              <Link
+                href="/admin/users/new"
+                className="inline-flex items-center space-x-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 sm:px-8 py-2.5 sm:py-3 rounded-xl hover:shadow-xl transition-all duration-200 text-sm sm:text-base"
+              >
+                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>Crear primer usuario</span>
+              </Link>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {users.map((user) => {
-              const { color, label, icon: RoleIcon } = getRoleBadge(user.role);
-              
-              return (
-                <div
-                  key={user.id}
-                  className="bg-white rounded-xl sm:rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden group"
-                >
-                  {/* Header con gradiente según rol */}
-                  <div className={`h-20 sm:h-24 bg-gradient-to-r ${
-                    user.role === "admin" 
-                      ? "from-purple-500 to-pink-500" 
-                      : "from-blue-500 to-indigo-500"
-                  } relative`}>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="bg-white/20 backdrop-blur-sm rounded-full p-3 sm:p-4">
-                        {user.photo ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img 
-                            src={user.photo} 
-                            alt={user.name}
-                            className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover"
-                          />
-                        ) : (
-                          <User className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
-                        )}
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              {users.map((user) => {
+                const { color, label, icon: RoleIcon } = getRoleBadge(user.role);
+                
+                return (
+                  <div
+                    key={user.id}
+                    className="bg-white rounded-xl sm:rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden group"
+                  >
+                    {/* Header con gradiente según rol */}
+                    <div className={`h-20 sm:h-24 bg-gradient-to-r ${
+                      user.role === "admin" 
+                        ? "from-purple-500 to-pink-500" 
+                        : "from-blue-500 to-indigo-500"
+                    } relative`}>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="bg-white/20 backdrop-blur-sm rounded-full p-3 sm:p-4">
+                          {user.photo ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img 
+                              src={user.photo} 
+                              alt={user.name}
+                              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover"
+                            />
+                          ) : (
+                            <User className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
+                          )}
+                        </div>
+                      </div>
+                      <div className="absolute bottom-0 right-0 p-2 sm:p-3">
+                        <span className={`${color} px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium flex items-center space-x-1`}>
+                          <RoleIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                          <span>{label}</span>
+                        </span>
                       </div>
                     </div>
-                    <div className="absolute bottom-0 right-0 p-2 sm:p-3">
-                      <span className={`${color} px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium flex items-center space-x-1`}>
-                        <RoleIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                        <span>{label}</span>
-                      </span>
-                    </div>
-                  </div>
 
-                  {/* Contenido */}
-                  <div className="p-4 sm:p-6">
-                    <h3 className="text-base sm:text-lg lg:text-xl font-bold text-gray-800 mb-1 group-hover:text-indigo-600 transition-colors truncate">
-                      {user.name}
-                    </h3>
-                    <p className="text-xs sm:text-sm text-gray-600 flex items-center truncate">
-                      <Mail className="w-3 h-3 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
-                      {user.email}
-                    </p>
-                    {user.phone && (
-                      <p className="text-xs sm:text-sm text-gray-600 flex items-center mt-1 truncate">
-                        <Phone className="w-3 h-3 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
-                        {user.phone}
+                    {/* Contenido */}
+                    <div className="p-4 sm:p-6">
+                      <h3 className="text-base sm:text-lg lg:text-xl font-bold text-gray-800 mb-1 group-hover:text-indigo-600 transition-colors truncate">
+                        {user.name}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-gray-600 flex items-center truncate">
+                        <Mail className="w-3 h-3 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
+                        {user.email}
                       </p>
-                    )}
-                    
-                    {/* Estadísticas del usuario */}
-                    <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-100">
-                      <div className="text-center bg-gray-50 rounded-xl p-2 sm:p-3">
-                        <p className="text-lg sm:text-2xl font-bold text-indigo-600">
-                          {user._count.loans}
+                      {user.phone && (
+                        <p className="text-xs sm:text-sm text-gray-600 flex items-center mt-1 truncate">
+                          <Phone className="w-3 h-3 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
+                          {user.phone}
                         </p>
-                        <p className="text-[10px] sm:text-xs text-gray-500">Préstamos</p>
+                      )}
+                      <p className="text-xs sm:text-sm text-gray-500 flex items-center mt-1 truncate">
+                        <span className="font-medium mr-1">ID:</span>
+                        {user.identification}
+                      </p>
+                      
+                      {/* Estadísticas del usuario */}
+                      <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-100">
+                        <div className="text-center bg-gray-50 rounded-xl p-2 sm:p-3">
+                          <p className="text-lg sm:text-2xl font-bold text-indigo-600">
+                            {user._count.loans}
+                          </p>
+                          <p className="text-[10px] sm:text-xs text-gray-500">Préstamos</p>
+                        </div>
+                        <div className="text-center bg-gray-50 rounded-xl p-2 sm:p-3">
+                          <p className="text-lg sm:text-2xl font-bold text-purple-600">
+                            {user._count.reservations}
+                          </p>
+                          <p className="text-[10px] sm:text-xs text-gray-500">Reservas</p>
+                        </div>
                       </div>
-                      <div className="text-center bg-gray-50 rounded-xl p-2 sm:p-3">
-                        <p className="text-lg sm:text-2xl font-bold text-purple-600">
-                          {user._count.reservations}
-                        </p>
-                        <p className="text-[10px] sm:text-xs text-gray-500">Reservas</p>
+
+                      {/* Fecha de registro */}
+                      <div className="mt-2 sm:mt-3 text-[10px] sm:text-xs text-gray-400 flex items-center">
+                        <Calendar className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
+                        Registrado: {new Date(user.createdAt).toLocaleDateString()}
                       </div>
-                    </div>
 
-                    {/* Fecha de registro */}
-                    <div className="mt-2 sm:mt-3 text-[10px] sm:text-xs text-gray-400 flex items-center">
-                      <Calendar className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
-                      Registrado: {new Date(user.createdAt).toLocaleDateString()}
-                    </div>
-
-                    {/* Acciones */}
-                    <div className="flex flex-wrap items-center justify-end gap-1 sm:gap-2 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-100">
-                      <Link
-                        href={`/admin/users/${user.id}`}
-                        className="px-2 sm:px-3 py-1 sm:py-2 text-[10px] sm:text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                      >
-                        Ver Detalles
-                      </Link>
-                      
-                      {/* Botón Descargar Carnet */}
-                      <PrintCarnetButton 
-  user={user}
-  className="p-1.5 sm:p-2 text-gray-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50"
-/>
-                      
-                      {/* Botón Editar */}
-                      <Link
-                        href={`/admin/users/${user.id}/edit`}
-                        className="p-1.5 sm:p-2 text-gray-400 hover:text-green-600 transition-colors rounded-lg hover:bg-green-50"
-                        title="Editar Usuario"
-                      >
-                        <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                      </Link>
-                      
-                      {/* Botón Eliminar */}
-                      <DeleteUserButton userId={user.id} userName={user.name} />
+                      {/* Acciones */}
+                      <div className="flex flex-wrap items-center justify-end gap-1 sm:gap-2 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-100">
+                        <Link
+                          href={`/admin/users/${user.id}`}
+                          className="px-2 sm:px-3 py-1 sm:py-2 text-[10px] sm:text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        >
+                          Ver Detalles
+                        </Link>
+                        
+                        <PrintCarnetButton 
+                          user={user}
+                          className="p-1.5 sm:p-2 text-gray-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50"
+                        />
+                        
+                        <Link
+                          href={`/admin/users/${user.id}/edit`}
+                          className="p-1.5 sm:p-2 text-gray-400 hover:text-green-600 transition-colors rounded-lg hover:bg-green-50"
+                          title="Editar Usuario"
+                        >
+                          <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        </Link>
+                        
+                        <DeleteUserButton userId={user.id} userName={user.name} />
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
 
-        {/* Pie de página */}
-        {users.length > 0 && (
-          <div className="mt-6 sm:mt-8 text-center text-xs sm:text-sm text-gray-500">
-            Mostrando <span className="font-semibold text-gray-700">{users.length}</span> usuarios 
-            registrados en la biblioteca
-          </div>
+            {/* Pie de página */}
+            <div className="mt-6 sm:mt-8 text-center text-xs sm:text-sm text-gray-500">
+              {searchTerm ? (
+                <>
+                  Mostrando <span className="font-semibold text-gray-700">{users.length}</span> resultados 
+                  para "<span className="font-semibold text-indigo-600">{searchTerm}</span>"
+                </>
+              ) : (
+                <>
+                  Mostrando <span className="font-semibold text-gray-700">{users.length}</span> usuarios 
+                  registrados en la biblioteca
+                </>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>
