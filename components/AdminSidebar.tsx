@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { signOut, useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import {
@@ -19,7 +19,9 @@ import {
     LogOut,
     Loader2,
     Menu,
-    X
+    X,
+    UserCircle,
+    User,
 } from "lucide-react";
 
 const menu = [
@@ -44,6 +46,11 @@ const menu = [
         href: "/admin/users"
     },
     {
+        icon: UserCircle,
+        label: "Mi Perfil",
+        href: "/admin/profile"
+    },
+    {
         icon: ClipboardList,
         label: "Préstamos",
         href: "/admin/loans"
@@ -63,6 +70,7 @@ const menu = [
 export default function AdminSidebar() {
     const pathname = usePathname();
     const router = useRouter();
+    const { data: session } = useSession();
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const [isMobileOpen, setIsMobileOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
@@ -111,15 +119,40 @@ export default function AdminSidebar() {
             return pathname === item.href || 
                    (pathname.startsWith("/admin/books") && pathname !== "/admin/books/new");
         }
+        // Para "Mi Perfil", activo si está en /admin/profile
+        if (item.href === "/admin/profile") {
+            return pathname === item.href || pathname.startsWith("/admin/profile");
+        }
         // Para los demás, usar startsWith
         return pathname === item.href || pathname.startsWith(item.href + '/');
+    };
+
+    // Obtener iniciales del nombre del usuario
+    const getUserInitials = () => {
+        if (session?.user?.name) {
+            return session.user.name
+                .split(' ')
+                .map(word => word[0])
+                .join('')
+                .toUpperCase()
+                .slice(0, 2);
+        }
+        return 'A';
+    };
+
+    // Obtener nombre del usuario
+    const getUserName = () => {
+        if (session?.user?.name) {
+            return session.user.name;
+        }
+        return 'Administrador';
     };
 
     const SidebarContent = () => (
         <>
             {/* Logo */}
             <div className="h-16 sm:h-20 flex items-center px-4 sm:px-6 lg:px-8 border-b border-gray-800">
-                <Link href="/" className="flex items-center space-x-2" onClick={closeMobile}>
+                <Link href="/admin/dashboard" className="flex items-center space-x-2" onClick={closeMobile}>
                     <div className="relative w-32 sm:w-40 md:w-48 lg:w-56 h-8 sm:h-10 md:h-12">
                         <Image
                             src="/title.png"
@@ -181,28 +214,45 @@ export default function AdminSidebar() {
                         <p className="text-xs sm:text-sm text-indigo-100 mb-3 sm:mb-4">
                             Estadísticas avanzadas
                         </p>
-                        <button className="w-full bg-white text-indigo-700 rounded-lg py-1.5 sm:py-2 text-xs sm:text-sm font-semibold hover:bg-gray-100 transition">
-                            Ver Estadísticas
-                        </button>
+                        <Link 
+                            href="/admin/profile"
+                            onClick={closeMobile}
+                            className="block w-full bg-white text-indigo-700 rounded-lg py-1.5 sm:py-2 text-xs sm:text-sm font-semibold hover:bg-gray-100 transition text-center"
+                        >
+                            Ver Perfil
+                        </Link>
                     </div>
                 </div>
             </div>
 
             {/* Usuario y Logout */}
             <div className="border-t border-gray-800 p-3 sm:p-4 lg:p-5">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-indigo-600 flex items-center justify-center text-base sm:text-lg font-bold flex-shrink-0">
-                        A
+                <Link 
+                    href="/admin/profile"
+                    onClick={closeMobile}
+                    className="flex items-center gap-3 hover:bg-gray-800/50 rounded-xl p-2 transition-colors"
+                >
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center text-base sm:text-lg font-bold flex-shrink-0 text-white">
+                        {session?.user?.photo ? (
+                            <img 
+                                src={session.user.photo} 
+                                alt="Foto de perfil"
+                                className="w-full h-full rounded-full object-cover"
+                            />
+                        ) : (
+                            getUserInitials()
+                        )}
                     </div>
                     <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-sm sm:text-base truncate">
+                        <p className="font-semibold text-sm sm:text-base truncate text-white">
+                            {getUserName()}
+                        </p>
+                        <p className="text-xs text-gray-400 truncate flex items-center gap-1">
+                            <User size={12} />
                             Administrador
                         </p>
-                        <p className="text-xs text-gray-400 truncate">
-                            Admin • Biblioteca
-                        </p>
                     </div>
-                </div>
+                </Link>
 
                 <button 
                     onClick={handleLogout}
