@@ -4,10 +4,10 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const { id } = await context.params;
 
     if (!id) {
       return NextResponse.json(
@@ -22,7 +22,7 @@ export async function GET(
       include: {
         _count: {
           select: {
-            copies: true, // total de ejemplares
+            copies: true,
           },
         },
       },
@@ -43,7 +43,7 @@ export async function GET(
       },
     });
 
-    // Contar préstamos activos (para saber cuántos están prestados)
+    // Contar préstamos activos
     const activeLoans = await prisma.loan.count({
       where: {
         copy: {
@@ -76,7 +76,7 @@ export async function GET(
   } catch (error) {
     console.error("Error al obtener el libro:", error);
     return NextResponse.json(
-      { 
+      {
         error: "Error al obtener los detalles del libro",
         details: error instanceof Error ? error.message : "Error desconocido"
       },
