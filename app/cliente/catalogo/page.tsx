@@ -136,20 +136,20 @@ function BookRow({
 
                 <div className="space-y-2.5">
                   {/* Botón de reserva - ya incluye el texto y la lógica completa */}
-                
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <ReserveButton bookId={book.id} />
+
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <ReserveButton bookId={book.id} />
+                    </div>
+                    <FavoriteButton bookId={book.id} className="flex-shrink-0" />
                   </div>
-                  <FavoriteButton bookId={book.id} className="flex-shrink-0" />
-                </div>
                   {/* Botón para ver detalle del libro */}
                   <Link
                     href={`/cliente/libro/${book.id}`}
-                    className="w-full flex items-center justify-center gap-2 bg-gray-100 text-gray-700 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-200 transition-all"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition text-sm"
                   >
-                    <Eye size={16} />
-                    Ver detalle
+                    <Eye className="w-4 h-4" />
+                    Ver detalles
                   </Link>
                 </div>
               </div>
