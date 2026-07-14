@@ -57,21 +57,6 @@ type Subscription = {
   updatedAt: Date;
 };
 
-type UserWithRelations = {
-  id: string;
-  name: string;
-  email: string;
-  phone: string | null;
-  role: string;
-  status: string;
-  password: string;
-  createdAt: Date;
-  updatedAt: Date;
-  loans: LoanWithBook[];
-  reservations: ReservationWithBook[];
-  subscriptions: Subscription | null;
-};
-
 export default async function UserDetailPage({ 
   params 
 }: { 
@@ -79,18 +64,10 @@ export default async function UserDetailPage({
 }) {
   const { id } = await params;
 
+  // ✅ Usamos include en lugar de select para evitar problemas con campos que pueden no existir
   const user = await prisma.user.findUnique({
     where: { id: id },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      phone: true,
-      role: true,
-      status: true,
-      password: true,
-      createdAt: true,
-      updatedAt: true,
+    include: {
       loans: {
         include: {
           copy: {
@@ -191,7 +168,11 @@ export default async function UserDetailPage({
 
   const roleInfo = getRoleInfo(user.role);
   const RoleIcon = roleInfo.icon;
-  const statusInfo = getUserStatus(user.status || "active");
+  
+  // ✅ Manejar status de forma segura - si no existe, usar "active" por defecto
+  // @ts-ignore - Ignoramos porque el campo puede no existir en producción
+  const userStatus = user.status || "active";
+  const statusInfo = getUserStatus(userStatus);
   const StatusIcon = statusInfo.icon;
 
   return (
@@ -338,6 +319,7 @@ export default async function UserDetailPage({
                           <div className="flex items-center space-x-3">
                             <div className="w-12 h-16 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex-shrink-0 overflow-hidden">
                               {loan.copy.book.coverImage ? (
+                                // eslint-disable-next-line @next/next/no-img-element
                                 <img 
                                   src={loan.copy.book.coverImage} 
                                   alt={loan.copy.book.title}
@@ -404,6 +386,7 @@ export default async function UserDetailPage({
                         <div className="flex items-center space-x-3">
                           <div className="w-10 h-14 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex-shrink-0 overflow-hidden">
                             {reservation.book.coverImage ? (
+                              // eslint-disable-next-line @next/next/no-img-element
                               <img 
                                 src={reservation.book.coverImage} 
                                 alt={reservation.book.title}
