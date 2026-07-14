@@ -49,7 +49,7 @@ export function UserStatusToggle({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || `Error al ${action} el usuario`);
+        throw new Error(data.error || data.details || `Error al ${action} el usuario`);
       }
 
       setSuccess(`Usuario ${action}do exitosamente`);
@@ -72,7 +72,7 @@ export function UserStatusToggle({
   };
 
   return (
-    <div className="relative">
+    <div className="relative inline-block group">
       <button
         onClick={handleToggle}
         disabled={loading}
@@ -98,14 +98,14 @@ export function UserStatusToggle({
       </span>
 
       {error && (
-        <div className="absolute top-full mt-1 left-0 right-0 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-1 z-10">
+        <div className="absolute top-full mt-1 left-0 right-0 p-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-1 z-10 min-w-[200px]">
           <AlertCircle className="w-3 h-3 flex-shrink-0" />
           <span>{error}</span>
         </div>
       )}
 
       {success && (
-        <div className="absolute top-full mt-1 left-0 right-0 p-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700 flex items-center gap-1 z-10">
+        <div className="absolute top-full mt-1 left-0 right-0 p-2 bg-green-50 border border-green-200 rounded-lg text-xs text-green-700 flex items-center gap-1 z-10 min-w-[200px]">
           <CheckCircle className="w-3 h-3 flex-shrink-0" />
           <span>{success}</span>
         </div>

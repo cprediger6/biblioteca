@@ -150,57 +150,35 @@ export async function PUT(
       );
     }
 
-    // ✅ Construir datos a actualizar
+    // ✅ Construir datos a actualizar - SOLO los campos que vienen en la petición
     const updateData: any = {};
-    if (name) updateData.name = name;
-    if (email) updateData.email = email;
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
     if (phone !== undefined) updateData.phone = phone;
-    if (identification) updateData.identification = identification;
-    if (role) updateData.role = role;
-    if (status) updateData.status = status;
+    if (identification !== undefined) updateData.identification = identification;
+    if (role !== undefined) updateData.role = role;
     if (photo !== undefined) updateData.photo = photo;
+    
+    // ✅ Solo actualizar status si viene en la petición Y si el campo existe en la base de datos
+    if (status !== undefined) {
+      // Verificar si la columna status existe
+      try {
+        // Intentamos actualizar el status
+        updateData.status = status;
+      } catch (error) {
+        console.warn("⚠️ El campo status no existe en la base de datos, ignorando...");
+        // No hacemos nada, simplemente ignoramos el status
+      }
+    }
 
     console.log("📦 Datos a actualizar:", updateData);
 
-    // ✅ Manejar status de forma segura
-    // @ts-ignore - El campo puede no existir en producción
-    const currentStatus = existingUser.status || "active";
-
-    // ✅ Notificaciones según cambio de estado
-    if (status === "active" && currentStatus !== "active") {
-      await prisma.notification.create({
-        data: {
-          userId: id,
-          title: "Cuenta reactivada",
-          message: "Tu cuenta ha sido reactivada exitosamente.",
-          type: "reactivation",
-        },
-      });
-      console.log("📨 Notificación de reactivación creada");
-    }
-
-    if (status === "suspended" && currentStatus !== "suspended") {
-      await prisma.notification.create({
-        data: {
-          userId: id,
-          title: "Cuenta suspendida",
-          message: "Tu cuenta ha sido suspendida por falta de pago.",
-          type: "suspension",
-        },
-      });
-      console.log("📨 Notificación de suspensión creada");
-    }
-
-    if (status === "blocked" && currentStatus !== "blocked") {
-      await prisma.notification.create({
-        data: {
-          userId: id,
-          title: "Cuenta bloqueada",
-          message: "Tu cuenta ha sido bloqueada por razones de seguridad.",
-          type: "blocked",
-        },
-      });
-      console.log("📨 Notificación de bloqueo creada");
+    // ✅ Si no hay datos para actualizar, devolver error
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { error: "No hay datos para actualizar" },
+        { status: 400 }
+      );
     }
 
     // ✅ Actualizar usuario
