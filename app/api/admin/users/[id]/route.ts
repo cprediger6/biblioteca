@@ -27,7 +27,6 @@ export async function GET(
       );
     }
 
-    // ✅ Usar include en lugar de select para evitar problemas con campos que pueden no existir
     const user = await prisma.user.findUnique({
       where: { id },
       include: {
@@ -124,9 +123,11 @@ export async function PUT(
     }
 
     const body = await request.json();
+    console.log("📝 Datos recibidos en PUT:", body);
+
     const { name, email, phone, identification, role, status, photo } = body;
 
-    // ✅ Usar include en lugar de select
+    // ✅ Verificar que el usuario existe
     const existingUser = await prisma.user.findUnique({
       where: { id },
     });
@@ -138,14 +139,18 @@ export async function PUT(
       );
     }
 
+    console.log("👤 Usuario existente:", { id: existingUser.id, name: existingUser.name });
+
+    // ✅ Validar estados permitidos
     const validStatuses = ["active", "suspended", "blocked", "inactive"];
     if (status && !validStatuses.includes(status)) {
       return NextResponse.json(
-        { error: "Estado inválido. Los estados permitidos son: active, suspended, blocked, inactive" },
+        { error: `Estado inválido. Los estados permitidos son: ${validStatuses.join(', ')}` },
         { status: 400 }
       );
     }
 
+    // ✅ Construir datos a actualizar
     const updateData: any = {};
     if (name) updateData.name = name;
     if (email) updateData.email = email;
@@ -155,11 +160,13 @@ export async function PUT(
     if (status) updateData.status = status;
     if (photo !== undefined) updateData.photo = photo;
 
+    console.log("📦 Datos a actualizar:", updateData);
+
     // ✅ Manejar status de forma segura
     // @ts-ignore - El campo puede no existir en producción
     const currentStatus = existingUser.status || "active";
 
-    // Notificaciones según cambio de estado
+    // ✅ Notificaciones según cambio de estado
     if (status === "active" && currentStatus !== "active") {
       await prisma.notification.create({
         data: {
@@ -169,6 +176,7 @@ export async function PUT(
           type: "reactivation",
         },
       });
+      console.log("📨 Notificación de reactivación creada");
     }
 
     if (status === "suspended" && currentStatus !== "suspended") {
@@ -180,6 +188,7 @@ export async function PUT(
           type: "suspension",
         },
       });
+      console.log("📨 Notificación de suspensión creada");
     }
 
     if (status === "blocked" && currentStatus !== "blocked") {
@@ -191,11 +200,20 @@ export async function PUT(
           type: "blocked",
         },
       });
+      console.log("📨 Notificación de bloqueo creada");
     }
 
+    // ✅ Actualizar usuario
     const updatedUser = await prisma.user.update({
       where: { id },
       data: updateData,
+    });
+
+    console.log("✅ Usuario actualizado:", { id: updatedUser.id, name: updatedUser.name });
+
+    // ✅ Obtener el usuario actualizado con conteos
+    const userWithCounts = await prisma.user.findUnique({
+      where: { id },
       include: {
         _count: {
           select: {
@@ -209,12 +227,15 @@ export async function PUT(
 
     return NextResponse.json({
       message: "Usuario actualizado exitosamente",
-      user: updatedUser,
+      user: userWithCounts,
     });
   } catch (error) {
-    console.error("Error al actualizar usuario:", error);
+    console.error("❌ Error al actualizar usuario:", error);
     return NextResponse.json(
-      { error: "Error al actualizar el usuario" },
+      { 
+        error: "Error al actualizar el usuario",
+        details: error instanceof Error ? error.message : "Error desconocido"
+      },
       { status: 500 }
     );
   }
