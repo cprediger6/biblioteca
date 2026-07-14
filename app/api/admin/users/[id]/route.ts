@@ -99,8 +99,6 @@ export async function GET(
   }
 }
 
-// app/api/admin/users/[id]/route.ts - Método PUT corregido
-
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -157,19 +155,29 @@ export async function PUT(
     if (role !== undefined) updateData.role = role;
     if (photo !== undefined) updateData.photo = photo;
     
-    // ✅ Verificar si el campo status existe en el modelo antes de usarlo
-    // El error de Prisma nos dice que el campo no existe, así que lo ignoramos
-    // Hasta que el cliente de Prisma se actualice en Vercel
-    if (status !== undefined) {
-      // Verificar si el modelo User tiene el campo status
-      try {
-        // Intentamos actualizar el status - esto fallará si el campo no existe
-        updateData.status = status;
-        console.log('✅ Campo status agregado para actualización');
-      } catch (error) {
-        console.warn('⚠️ El campo status no existe en el modelo, ignorando...');
-        // No hacemos nada, simplemente no incluimos el campo
-      }
+    // ✅ Manejar status de forma segura
+    // Verificamos si el campo status existe en el modelo
+    let statusFieldExists = false;
+    try {
+      // Intentamos obtener un usuario para verificar los campos disponibles
+      const testUser = await prisma.user.findFirst({
+        select: {
+          id: true,
+          status: true,
+        },
+      });
+      statusFieldExists = true;
+    } catch (error) {
+      statusFieldExists = false;
+      console.warn('⚠️ El campo status no existe en el modelo, ignorando...');
+    }
+
+    // Solo agregar status si el campo existe
+    if (status !== undefined && statusFieldExists) {
+      updateData.status = status;
+      console.log('✅ Campo status agregado para actualización');
+    } else if (status !== undefined && !statusFieldExists) {
+      console.warn('⚠️ El campo status no existe en el modelo, ignorando actualización de status');
     }
 
     // ✅ Si no hay datos para actualizar, devolver error
