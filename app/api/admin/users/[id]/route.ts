@@ -156,20 +156,15 @@ export async function PUT(
     if (photo !== undefined) updateData.photo = photo;
     
     // ✅ Manejar status de forma segura
-    // Verificamos si el campo status existe en el modelo
+    // Comprobamos dinámicamente si la propiedad `status` existe en el modelo
     let statusFieldExists = false;
     try {
-      // Intentamos obtener un usuario para verificar los campos disponibles
-      const testUser = await prisma.user.findFirst({
-        select: {
-          id: true,
-          status: true,
-        },
-      });
-      statusFieldExists = true;
+      // Obtenemos un usuario completo (sin select) y comprobamos la propiedad en tiempo de ejecución
+      const testUser = await prisma.user.findFirst();
+      statusFieldExists = !!testUser && Object.prototype.hasOwnProperty.call(testUser, 'status');
     } catch (error) {
       statusFieldExists = false;
-      console.warn('⚠️ El campo status no existe en el modelo, ignorando...');
+      console.warn('⚠️ El campo status no existe en el modelo o hubo un error al comprobarlo', error);
     }
 
     // Solo agregar status si el campo existe
