@@ -33,6 +33,14 @@ export async function PUT(
     const reservation = await prisma.reservation.findUnique({
       where: { id },
       include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            identification: true,
+          },
+        },
         book: {
           include: {
             copies: true,
@@ -48,7 +56,22 @@ export async function PUT(
       );
     }
 
+    // Si la reserva ya no está pendiente, no permitir cambios
+    if (reservation.status !== "pending") {
+      const statusMap = {
+        'approved': 'aprobada',
+        'rejected': 'rechazada',
+        'cancelled': 'cancelada'
+      };
+      return NextResponse.json(
+        { error: `Esta reserva ya ha sido ${statusMap[reservation.status as keyof typeof statusMap] || 'procesada'}` },
+        { status: 400 }
+      );
+    }
+
     let updatedReservation;
+    let assignedCopy = null;
+    let createdLoan = null;
 
     // Si se aprueba la reserva
     if (status === "approved") {
@@ -62,13 +85,47 @@ export async function PUT(
         );
       }
 
-      // Cambiar el estado del ejemplar a "reserved"
+      // Cambiar el estado del ejemplar a "borrowed" (prestado)
       await prisma.copy.update({
         where: { id: availableCopy.id },
-        data: { status: "reserved" },
+        data: { status: "borrowed" },
       });
 
-      // Actualizar la reserva
+      // Crear el préstamo automáticamente
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 7); // 7 días de préstamo
+
+      createdLoan = await prisma.loan.create({
+        data: {
+          userId: reservation.userId,
+          copyId: availableCopy.id,
+          loanDate: new Date(),
+          dueDate: dueDate,
+          status: "active",
+        },
+        include: {
+          copy: {
+            include: {
+              book: {
+                select: {
+                  id: true,
+                  title: true,
+                  author: true,
+                },
+              },
+            },
+          },
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      // Actualizar la reserva a "approved"
       updatedReservation = await prisma.reservation.update({
         where: { id },
         data: { status: "approved" },
@@ -92,15 +149,30 @@ export async function PUT(
         },
       });
 
+      assignedCopy = {
+        id: availableCopy.id,
+        code: availableCopy.code,
+        status: "borrowed",
+      };
+
+      // Crear notificación para el usuario
+      await prisma.notification.create({
+        data: {
+          userId: reservation.userId,
+          title: "📚 Reserva aprobada y préstamo creado",
+          message: `Tu reserva del libro "${reservation.book.title}" ha sido aprobada. 
+                    Se ha creado un préstamo con el ejemplar ${availableCopy.code}.
+                    Fecha de devolución: ${dueDate.toLocaleDateString('es-ES')}`,
+          type: "reservation_approved",
+        },
+      });
+
       return NextResponse.json({
         success: true,
-        message: "Reserva aprobada exitosamente",
+        message: "Reserva aprobada y préstamo creado exitosamente",
         reservation: updatedReservation,
-        assignedCopy: {
-          id: availableCopy.id,
-          code: availableCopy.code,
-          status: "reserved",
-        },
+        assignedCopy,
+        loan: createdLoan,
       });
     }
     
@@ -129,6 +201,16 @@ export async function PUT(
         },
       });
 
+      // Crear notificación para el usuario
+      await prisma.notification.create({
+        data: {
+          userId: reservation.userId,
+          title: "❌ Reserva rechazada",
+          message: `Tu reserva del libro "${reservation.book.title}" ha sido rechazada.`,
+          type: "reservation_rejected",
+        },
+      });
+
       return NextResponse.json({
         success: true,
         message: "Reserva rechazada",
@@ -138,17 +220,6 @@ export async function PUT(
     
     // Si se cancela la reserva
     else if (status === "cancelled") {
-      // Si la reserva estaba aprobada, liberar el ejemplar
-      if (reservation.status === "approved") {
-        const reservedCopy = reservation.book.copies.find(c => c.status === "reserved");
-        if (reservedCopy) {
-          await prisma.copy.update({
-            where: { id: reservedCopy.id },
-            data: { status: "available" },
-          });
-        }
-      }
-
       updatedReservation = await prisma.reservation.update({
         where: { id },
         data: { status: "cancelled" },
@@ -169,6 +240,16 @@ export async function PUT(
               coverImage: true,
             },
           },
+        },
+      });
+
+      // Crear notificación para el usuario
+      await prisma.notification.create({
+        data: {
+          userId: reservation.userId,
+          title: "⛔ Reserva cancelada",
+          message: `Tu reserva del libro "${reservation.book.title}" ha sido cancelada.`,
+          type: "reservation_cancelled",
         },
       });
 
@@ -210,6 +291,7 @@ export async function DELETE(
       );
     }
 
+    // Primero obtener la reserva con sus relaciones
     const reservation = await prisma.reservation.findUnique({
       where: { id },
       include: {
@@ -228,17 +310,41 @@ export async function DELETE(
       );
     }
 
-    // Si la reserva estaba aprobada, liberar el ejemplar
+    // Si la reserva está aprobada, buscar el ejemplar que fue reservado
     if (reservation.status === "approved") {
-      const reservedCopy = reservation.book.copies.find(c => c.status === "reserved");
-      if (reservedCopy) {
+      // Buscar el préstamo asociado a esta reserva
+      const loan = await prisma.loan.findFirst({
+        where: {
+          userId: reservation.userId,
+          copy: {
+            bookId: reservation.bookId,
+          },
+          status: "active",
+        },
+        include: {
+          copy: true,
+        },
+      });
+
+      if (loan) {
+        // Liberar el ejemplar
         await prisma.copy.update({
-          where: { id: reservedCopy.id },
+          where: { id: loan.copyId },
           data: { status: "available" },
+        });
+
+        // Marcar el préstamo como devuelto
+        await prisma.loan.update({
+          where: { id: loan.id },
+          data: {
+            status: "returned",
+            returnDate: new Date(),
+          },
         });
       }
     }
 
+    // Eliminar la reserva
     await prisma.reservation.delete({
       where: { id },
     });

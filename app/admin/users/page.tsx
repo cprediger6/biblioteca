@@ -5,9 +5,11 @@ import PrintCarnetButton from "@/components/PrintCarnetButton";
 import { 
   Plus, Search, Filter, User, Mail, Phone, 
   Calendar, Edit, Trash2,
-  Users, UserCheck, Crown, Download, X
+  Users, UserCheck, Crown, Download,  X,
+  UserX  // ✅ Importar UserX
 } from "lucide-react";
 import DeleteUserButton from "@/components/DeleteUserButton";
+import { UserStatusToggle } from "@/components/UserStatusToggle";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { redirect } from "next/navigation";
@@ -20,6 +22,7 @@ type UserWithCounts = {
   photo: string | null;
   identification: string;
   role: string;
+  status: string; // ✅ Agregar campo status
   createdAt: Date;
   _count: {
     loans: number;
@@ -70,6 +73,7 @@ export default async function UsersPage({
       photo: true,
       identification: true,
       role: true,
+      status: true, // ✅ Incluir status
       createdAt: true,
       _count: {
         select: {
@@ -88,6 +92,7 @@ export default async function UsersPage({
     select: {
       id: true,
       role: true,
+      status: true, // ✅ Incluir status
       _count: {
         select: {
           loans: true,
@@ -100,6 +105,8 @@ export default async function UsersPage({
   const adminUsers = allUsers.filter(u => u.role === "admin").length;
   const regularUsers = allUsers.filter(u => u.role === "user").length;
   const usersWithLoans = allUsers.filter(u => u._count.loans > 0).length;
+  const activeUsers = allUsers.filter(u => u.status === "active").length;
+  const suspendedUsers = allUsers.filter(u => u.status === "suspended").length;
 
   const getRoleBadge = (role: string) => {
     if (role === "admin") {
@@ -114,6 +121,32 @@ export default async function UsersPage({
       label: "Usuario", 
       icon: User 
     };
+  };
+
+  const getStatusBadge = (status: string) => {
+    const statusMap = {
+      active: { 
+        color: "bg-green-100 text-green-700", 
+        label: "Activo",
+        icon: UserCheck
+      },
+      suspended: { 
+        color: "bg-amber-100 text-amber-700", 
+        label: "Suspendido",
+        icon: UserX
+      },
+      blocked: { 
+        color: "bg-red-100 text-red-700", 
+        label: "Bloqueado",
+        icon: UserX
+      },
+      inactive: { 
+        color: "bg-gray-100 text-gray-700", 
+        label: "Inactivo",
+        icon: UserX
+      },
+    };
+    return statusMap[status as keyof typeof statusMap] || statusMap.active;
   };
 
   return (
@@ -154,22 +187,22 @@ export default async function UsersPage({
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[10px] sm:text-sm text-gray-500 font-medium">Administradores</p>
-                <p className="text-xl sm:text-3xl font-bold text-purple-600 mt-1 sm:mt-2">{adminUsers}</p>
+                <p className="text-[10px] sm:text-sm text-gray-500 font-medium">Activos</p>
+                <p className="text-xl sm:text-3xl font-bold text-green-600 mt-1 sm:mt-2">{activeUsers}</p>
               </div>
-              <div className="bg-purple-50 p-2 sm:p-3 rounded-xl">
-                <Crown className="w-4 h-4 sm:w-6 sm:h-6 text-purple-600" />
+              <div className="bg-green-50 p-2 sm:p-3 rounded-xl">
+                <UserCheck className="w-4 h-4 sm:w-6 sm:h-6 text-green-600" />
               </div>
             </div>
           </div>
           <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[10px] sm:text-sm text-gray-500 font-medium">Usuarios Regulares</p>
-                <p className="text-xl sm:text-3xl font-bold text-blue-600 mt-1 sm:mt-2">{regularUsers}</p>
+                <p className="text-[10px] sm:text-sm text-gray-500 font-medium">Suspendidos</p>
+                <p className="text-xl sm:text-3xl font-bold text-amber-600 mt-1 sm:mt-2">{suspendedUsers}</p>
               </div>
-              <div className="bg-blue-50 p-2 sm:p-3 rounded-xl">
-                <User className="w-4 h-4 sm:w-6 sm:h-6 text-blue-600" />
+              <div className="bg-amber-50 p-2 sm:p-3 rounded-xl">
+                <UserX className="w-4 h-4 sm:w-6 sm:h-6 text-amber-600" />
               </div>
             </div>
           </div>
@@ -177,10 +210,10 @@ export default async function UsersPage({
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[10px] sm:text-sm text-gray-500 font-medium">Con Préstamos</p>
-                <p className="text-xl sm:text-3xl font-bold text-green-600 mt-1 sm:mt-2">{usersWithLoans}</p>
+                <p className="text-xl sm:text-3xl font-bold text-indigo-600 mt-1 sm:mt-2">{usersWithLoans}</p>
               </div>
-              <div className="bg-green-50 p-2 sm:p-3 rounded-xl">
-                <UserCheck className="w-4 h-4 sm:w-6 sm:h-6 text-green-600" />
+              <div className="bg-indigo-50 p-2 sm:p-3 rounded-xl">
+                <Users className="w-4 h-4 sm:w-6 sm:h-6 text-indigo-600" />
               </div>
             </div>
           </div>
@@ -266,16 +299,20 @@ export default async function UsersPage({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {users.map((user) => {
                 const { color, label, icon: RoleIcon } = getRoleBadge(user.role);
+                const statusBadge = getStatusBadge(user.status);
+                const StatusIcon = statusBadge.icon;
                 
                 return (
                   <div
                     key={user.id}
                     className="bg-white rounded-xl sm:rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden group"
                   >
-                    {/* Header con gradiente según rol */}
+                    {/* Header con gradiente según rol y estado */}
                     <div className={`h-20 sm:h-24 bg-gradient-to-r ${
                       user.role === "admin" 
                         ? "from-purple-500 to-pink-500" 
+                        : user.status === "suspended"
+                        ? "from-amber-500 to-orange-500"
                         : "from-blue-500 to-indigo-500"
                     } relative`}>
                       <div className="absolute inset-0 flex items-center justify-center">
@@ -292,10 +329,14 @@ export default async function UsersPage({
                           )}
                         </div>
                       </div>
-                      <div className="absolute bottom-0 right-0 p-2 sm:p-3">
+                      <div className="absolute bottom-0 right-0 p-2 sm:p-3 flex gap-1">
                         <span className={`${color} px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium flex items-center space-x-1`}>
                           <RoleIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                           <span>{label}</span>
+                        </span>
+                        <span className={`${statusBadge.color} px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium flex items-center space-x-1`}>
+                          <StatusIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                          <span>{statusBadge.label}</span>
                         </span>
                       </div>
                     </div>
@@ -354,6 +395,12 @@ export default async function UsersPage({
                         <PrintCarnetButton 
                           user={user}
                           className="p-1.5 sm:p-2 text-gray-400 hover:text-indigo-600 transition-colors rounded-lg hover:bg-indigo-50"
+                        />
+                        
+                        <UserStatusToggle 
+                          userId={user.id}
+                          userName={user.name}
+                          currentStatus={user.status}
                         />
                         
                         <Link

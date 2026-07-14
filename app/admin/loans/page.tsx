@@ -1,178 +1,185 @@
-// app/admin/loans/new/page.tsx
+// app/admin/loans/page.tsx
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { 
-  ArrowLeft, Save, X, User, BookOpen, 
-  Search, Calendar, Loader2, CheckCircle, 
-  AlertCircle, Users
+  Plus, Search, BookOpen, User, Calendar, 
+  ArrowLeft, Loader2, CheckCircle, XCircle,
+  AlertCircle, Clock, RefreshCw, Users,
+  AlertTriangle, Edit, Info
 } from "lucide-react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 
-type UserType = {
+type Loan = {
   id: string;
-  name: string;
-  email: string;
-  identification: string;
-};
-
-type CopyType = {
-  id: string;
-  code: string;
-  book: {
+  userId: string;
+  copyId: string;
+  loanDate: Date;
+  dueDate: Date;
+  returnDate: Date | null;
+  status: string;
+  user: {
     id: string;
-    title: string;
-    author: string;
+    name: string;
+    email: string;
+    identification: string;
+  };
+  copy: {
+    id: string;
+    code: string;
+    book: {
+      id: string;
+      title: string;
+      author: string;
+      coverImage: string | null;
+    };
   };
 };
 
-export default function NewLoanPage() {
+export default function LoansPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const [searchUser, setSearchUser] = useState("");
-  const [searchCopy, setSearchCopy] = useState("");
-  const [users, setUsers] = useState<UserType[]>([]);
-  const [copies, setCopies] = useState<CopyType[]>([]);
-  const [selectedUser, setSelectedUser] = useState<UserType | null>(null);
-  const [selectedCopy, setSelectedCopy] = useState<CopyType | null>(null);
-  const [showUserResults, setShowUserResults] = useState(false);
-  const [showCopyResults, setShowCopyResults] = useState(false);
-  const [loadingUsers, setLoadingUsers] = useState(false);
-  const [loadingCopies, setLoadingCopies] = useState(false);
-  
-  const userSearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const copySearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  
-  const [loanDate, setLoanDate] = useState(new Date().toISOString().split('T')[0]);
-  const [dueDate, setDueDate] = useState(() => {
-    const date = new Date();
-    date.setDate(date.getDate() + 7);
-    return date.toISOString().split('T')[0];
-  });
+  const [loans, setLoans] = useState<Loan[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [returning, setReturning] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [showReturnModal, setShowReturnModal] = useState(false);
+  const [selectedLoanId, setSelectedLoanId] = useState<string | null>(null);
+  const [returnObservations, setReturnObservations] = useState("");
+  const [isDamaged, setIsDamaged] = useState(false);
 
-  // Buscar usuarios con debounce
-  useEffect(() => {
-    if (userSearchTimeout.current) {
-      clearTimeout(userSearchTimeout.current);
-    }
-
-    if (searchUser.length > 1) {
-      userSearchTimeout.current = setTimeout(() => {
-        searchUsers();
-      }, 500);
-    } else {
-      setUsers([]);
-      setShowUserResults(false);
-    }
-
-    return () => {
-      if (userSearchTimeout.current) {
-        clearTimeout(userSearchTimeout.current);
-      }
-    };
-  }, [searchUser]);
-
-  // Buscar ejemplares con debounce
-  useEffect(() => {
-    if (copySearchTimeout.current) {
-      clearTimeout(copySearchTimeout.current);
-    }
-
-    if (searchCopy.length > 1) {
-      copySearchTimeout.current = setTimeout(() => {
-        searchCopies();
-      }, 500);
-    } else {
-      setCopies([]);
-      setShowCopyResults(false);
-    }
-
-    return () => {
-      if (copySearchTimeout.current) {
-        clearTimeout(copySearchTimeout.current);
-      }
-    };
-  }, [searchCopy]);
-
-  const searchUsers = async () => {
-    if (searchUser.length < 2) return;
-    
-    setLoadingUsers(true);
+  const fetchLoans = async () => {
     try {
-      const res = await fetch(`/api/users?search=${encodeURIComponent(searchUser)}`);
-      if (!res.ok) throw new Error("Error al buscar usuarios");
-      const data = await res.json();
-      console.log("Usuarios encontrados:", data.users); // Debug
-      setUsers(data.users || []);
-      setShowUserResults(true);
+      setLoading(true);
+      setError(null);
+      const response = await fetch("/api/admin/loans/active");
+      
+      if (!response.ok) {
+        throw new Error("Error al cargar los préstamos");
+      }
+      
+      const data = await response.json();
+      setLoans(data.loans);
     } catch (error) {
-      console.error("Error buscando usuarios:", error);
-    } finally {
-      setLoadingUsers(false);
-    }
-  };
-
-  const searchCopies = async () => {
-    if (searchCopy.length < 2) return;
-    
-    setLoadingCopies(true);
-    try {
-      const res = await fetch(`/api/copies?search=${encodeURIComponent(searchCopy)}&available=true`);
-      if (!res.ok) throw new Error("Error al buscar ejemplares");
-      const data = await res.json();
-      console.log("Ejemplares encontrados:", data.copies); // Debug
-      setCopies(data.copies || []);
-      setShowCopyResults(true);
-    } catch (error) {
-      console.error("Error buscando ejemplares:", error);
-    } finally {
-      setLoadingCopies(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!selectedUser || !selectedCopy) {
-      setError("Debes seleccionar un usuario y un ejemplar");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const res = await fetch("/api/loans", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: selectedUser.id,
-          copyId: selectedCopy.id,
-          loanDate,
-          dueDate,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Error al crear préstamo");
-      }
-
-      setSuccess(true);
-      setTimeout(() => {
-        router.push("/admin/loans");
-        router.refresh();
-      }, 1500);
-    } catch (error: any) {
-      setError(error.message || "Error al crear el préstamo");
+      console.error("Error:", error);
+      setError("No se pudieron cargar los préstamos activos");
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchLoans();
+  }, []);
+
+  const handleReturn = async (loanId: string) => {
+    setSelectedLoanId(loanId);
+    setShowReturnModal(true);
+  };
+
+  const confirmReturn = async () => {
+    if (!selectedLoanId) return;
+
+    setReturning(selectedLoanId);
+    setSuccessMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/loans/${selectedLoanId}/return`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          returnDate: new Date().toISOString(),
+          isDamaged: isDamaged,
+          observations: returnObservations || "Devuelto en buen estado",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Error al devolver el libro");
+      }
+
+      setSuccessMessage("✅ Libro devuelto exitosamente");
+      setShowReturnModal(false);
+      setReturnObservations("");
+      setIsDamaged(false);
+      setSelectedLoanId(null);
+      
+      // Actualizar la lista
+      await fetchLoans();
+      
+      // Limpiar mensaje después de 3 segundos
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (error) {
+      console.error("Error:", error);
+      setError(error instanceof Error ? error.message : "Error al devolver el libro");
+      setTimeout(() => setError(null), 5000);
+    } finally {
+      setReturning(null);
+    }
+  };
+
+  const getDaysLeft = (dueDate: Date) => {
+    const today = new Date();
+    const diff = new Date(dueDate).getTime() - today.getTime();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  };
+
+  const getStatusBadge = (loan: Loan) => {
+    const daysLeft = getDaysLeft(loan.dueDate);
+    
+    if (loan.status === "returned") {
+      return {
+        label: "Devuelto",
+        color: "bg-gray-100 text-gray-700",
+        icon: CheckCircle,
+      };
+    }
+    
+    if (daysLeft < 0) {
+      return {
+        label: "Vencido",
+        color: "bg-red-100 text-red-700",
+        icon: AlertCircle,
+      };
+    }
+    
+    if (daysLeft <= 3) {
+      return {
+        label: `Próximo a vencer (${daysLeft} días)`,
+        color: "bg-yellow-100 text-yellow-700",
+        icon: Clock,
+      };
+    }
+    
+    return {
+      label: "Activo",
+      color: "bg-green-100 text-green-700",
+      icon: CheckCircle,
+    };
+  };
+
+  const formatDate = (date: Date) => {
+    return format(new Date(date), "dd/MM/yyyy", { locale: es });
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
+          <p className="text-gray-600">Cargando préstamos...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -180,268 +187,289 @@ export default function NewLoanPage() {
         
         {/* Header */}
         <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl sm:rounded-3xl p-6 sm:p-8 mb-6 sm:mb-8 text-white shadow-2xl">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">📖 Nuevo Préstamo</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold mb-1 sm:mb-2">📚 Gestión de Préstamos</h1>
               <p className="text-indigo-100 text-sm sm:text-base">
-                Registra un nuevo préstamo de libro
+                Administra los préstamos activos de la biblioteca
               </p>
             </div>
             <Link
-              href="/admin/loans"
-              className="w-full sm:w-auto bg-white/20 backdrop-blur-sm text-white px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl hover:bg-white/30 transition-all duration-200 flex items-center justify-center space-x-2 text-sm sm:text-base"
+              href="/admin/loans/new"
+              className="w-full sm:w-auto bg-white text-indigo-600 px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-semibold hover:shadow-xl transition-all duration-200 flex items-center justify-center space-x-2 text-sm sm:text-base"
             >
-              <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>Volver</span>
+              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span>Nuevo Préstamo</span>
             </Link>
           </div>
         </div>
 
-        {/* Formulario */}
-        <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm flex items-start">
-                <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
-                <span>{error}</span>
-              </div>
-            )}
-
-            {success && (
-              <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-xl text-sm flex items-center">
-                <CheckCircle className="w-5 h-5 mr-2" />
-                <span>¡Préstamo creado exitosamente! Redirigiendo...</span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Buscar Usuario */}
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <User className="inline w-4 h-4 mr-2 text-indigo-500" />
-                  Buscar Usuario *
-                </label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    value={searchUser}
-                    onChange={(e) => {
-                      setSearchUser(e.target.value);
-                      setSelectedUser(null);
-                      setShowUserResults(true);
-                    }}
-                    onFocus={() => {
-                      if (searchUser.length > 1) {
-                        setShowUserResults(true);
-                      }
-                    }}
-                    placeholder="Buscar por nombre o identificación..."
-                    className="w-full pl-9 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white"
-                  />
-                  {loadingUsers && (
-                    <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
-                  )}
-                </div>
-                
-                {selectedUser && (
-                  <div className="mt-2 p-3 bg-indigo-50 rounded-xl border border-indigo-200">
-                    <p className="font-semibold text-gray-800">{selectedUser.name}</p>
-                    <p className="text-sm text-gray-600">ID: {selectedUser.identification}</p>
-                    <p className="text-sm text-gray-600">{selectedUser.email}</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedUser(null);
-                        setSearchUser("");
-                      }}
-                      className="mt-1 text-xs text-red-600 hover:text-red-700"
-                    >
-                      Cambiar usuario
-                    </button>
-                  </div>
-                )}
-
-                {showUserResults && !selectedUser && users.length > 0 && (
-                  <div className="absolute z-20 mt-1 w-full bg-white rounded-xl shadow-lg border border-gray-200 max-h-60 overflow-y-auto">
-                    {users.map((user) => (
-                      <button
-                        key={user.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedUser(user);
-                          setSearchUser(user.name);
-                          setShowUserResults(false);
-                        }}
-                        className="w-full px-4 py-3 text-left hover:bg-indigo-50 transition-colors flex items-center gap-3 border-b border-gray-100 last:border-0"
-                      >
-                        <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
-                          <Users className="w-4 h-4 text-indigo-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">{user.name}</p>
-                          <p className="text-xs text-gray-500 truncate">ID: {user.identification}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {showUserResults && !selectedUser && users.length === 0 && searchUser.length > 1 && !loadingUsers && (
-                  <div className="absolute z-20 mt-1 w-full bg-white rounded-xl shadow-lg border border-gray-200 p-4 text-center">
-                    <p className="text-sm text-gray-500">No se encontraron usuarios</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Buscar Ejemplar */}
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <BookOpen className="inline w-4 h-4 mr-2 text-indigo-500" />
-                  Buscar Ejemplar *
-                </label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    value={searchCopy}
-                    onChange={(e) => {
-                      setSearchCopy(e.target.value);
-                      setSelectedCopy(null);
-                      setShowCopyResults(true);
-                    }}
-                    onFocus={() => {
-                      if (searchCopy.length > 1) {
-                        setShowCopyResults(true);
-                      }
-                    }}
-                    placeholder="Buscar por título, autor o código..."
-                    className="w-full pl-9 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white"
-                  />
-                  {loadingCopies && (
-                    <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin text-gray-400" />
-                  )}
-                </div>
-
-                {selectedCopy && (
-                  <div className="mt-2 p-3 bg-indigo-50 rounded-xl border border-indigo-200">
-                    <p className="font-semibold text-gray-800">{selectedCopy.book.title}</p>
-                    <p className="text-sm text-gray-600">Autor: {selectedCopy.book.author}</p>
-                    <p className="text-sm font-mono text-indigo-600">Código: {selectedCopy.code}</p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedCopy(null);
-                        setSearchCopy("");
-                      }}
-                      className="mt-1 text-xs text-red-600 hover:text-red-700"
-                    >
-                      Cambiar ejemplar
-                    </button>
-                  </div>
-                )}
-
-                {showCopyResults && !selectedCopy && copies.length > 0 && (
-                  <div className="absolute z-20 mt-1 w-full bg-white rounded-xl shadow-lg border border-gray-200 max-h-60 overflow-y-auto">
-                    {copies.map((copy) => (
-                      <button
-                        key={copy.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedCopy(copy);
-                          setSearchCopy(copy.book.title);
-                          setShowCopyResults(false);
-                        }}
-                        className="w-full px-4 py-3 text-left hover:bg-indigo-50 transition-colors border-b border-gray-100 last:border-0"
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-gray-800">{copy.book.title}</p>
-                          <p className="text-xs text-gray-500">{copy.book.author}</p>
-                          <p className="text-xs font-mono text-indigo-600 mt-1">Código: {copy.code}</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {showCopyResults && !selectedCopy && copies.length === 0 && searchCopy.length > 1 && !loadingCopies && (
-                  <div className="absolute z-20 mt-1 w-full bg-white rounded-xl shadow-lg border border-gray-200 p-4 text-center">
-                    <p className="text-sm text-gray-500">No se encontraron ejemplares disponibles</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Fecha de préstamo */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Calendar className="inline w-4 h-4 mr-2 text-indigo-500" />
-                  Fecha de Préstamo *
-                </label>
-                <input
-                  type="date"
-                  value={loanDate}
-                  onChange={(e) => setLoanDate(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white"
-                />
-              </div>
-
-              {/* Fecha de devolución */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Calendar className="inline w-4 h-4 mr-2 text-indigo-500" />
-                  Fecha de Devolución *
-                </label>
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  min={loanDate}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-900 bg-white"
-                />
-              </div>
-            </div>
-
-            {/* Resumen */}
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 border-2 border-indigo-200">
-              <h4 className="font-semibold text-gray-700 mb-2">📋 Resumen del Préstamo</h4>
-              <div className="space-y-1 text-sm text-gray-600">
-                <p><span className="font-medium">Usuario:</span> {selectedUser?.name || "No seleccionado"}</p>
-                <p><span className="font-medium">Libro:</span> {selectedCopy?.book.title || "No seleccionado"}</p>
-                <p><span className="font-medium">Código:</span> {selectedCopy?.code || "No seleccionado"}</p>
-                <p><span className="font-medium">Fecha préstamo:</span> {new Date(loanDate).toLocaleDateString()}</p>
-                <p><span className="font-medium">Fecha devolución:</span> {new Date(dueDate).toLocaleDateString()}</p>
-              </div>
-            </div>
-
-            {/* Botones */}
-            <div className="flex flex-col-reverse sm:flex-row items-center justify-end space-y-3 sm:space-y-0 sm:space-x-4 pt-4 border-t-2 border-gray-100">
-              <Link
-                href="/admin/loans"
-                className="w-full sm:w-auto px-6 py-3 border-2 border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all duration-200 flex items-center justify-center space-x-2"
-              >
-                <X className="w-4 h-4" />
-                <span>Cancelar</span>
-              </Link>
-              <button
-                type="submit"
-                disabled={loading || success}
-                className="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 text-white rounded-xl hover:shadow-xl transition-all duration-200 flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>Creando...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-5 h-5" />
-                    <span className="font-semibold">Crear Préstamo</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
+        {/* Estadísticas rápidas */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white rounded-xl shadow-lg p-4">
+            <p className="text-sm text-gray-500">Total Préstamos Activos</p>
+            <p className="text-2xl font-bold text-indigo-600">{loans.length}</p>
+          </div>
+          <div className="bg-white rounded-xl shadow-lg p-4">
+            <p className="text-sm text-gray-500">Vencidos</p>
+            <p className="text-2xl font-bold text-red-600">
+              {loans.filter(l => getDaysLeft(l.dueDate) < 0).length}
+            </p>
+          </div>
+          <div className="bg-white rounded-xl shadow-lg p-4">
+            <p className="text-sm text-gray-500">Próximos a vencer (3 días)</p>
+            <p className="text-2xl font-bold text-yellow-600">
+              {loans.filter(l => getDaysLeft(l.dueDate) >= 0 && getDaysLeft(l.dueDate) <= 3).length}
+            </p>
+          </div>
+          <div className="bg-white rounded-xl shadow-lg p-4">
+            <p className="text-sm text-gray-500">En tiempo</p>
+            <p className="text-2xl font-bold text-green-600">
+              {loans.filter(l => getDaysLeft(l.dueDate) > 3).length}
+            </p>
+          </div>
         </div>
+
+        {/* Mensajes */}
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-start gap-2">
+            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-xl flex items-start gap-2">
+            <CheckCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <span>{successMessage}</span>
+          </div>
+        )}
+
+        {/* Botón refrescar */}
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={fetchLoans}
+            className="px-4 py-2 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition flex items-center gap-2 text-sm"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Actualizar
+          </button>
+        </div>
+
+        {/* Lista de préstamos */}
+        {loans.length === 0 ? (
+          <div className="bg-white rounded-2xl shadow-xl p-12 text-center">
+            <div className="text-6xl mb-4">📖</div>
+            <h3 className="text-xl font-bold text-gray-700 mb-2">
+              No hay préstamos activos
+            </h3>
+            <p className="text-gray-500 mb-6">
+              Todos los libros han sido devueltos
+            </p>
+            <Link
+              href="/admin/loans/new"
+              className="inline-flex items-center space-x-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:shadow-xl transition"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Crear nuevo préstamo</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {loans.map((loan) => {
+              const statusBadge = getStatusBadge(loan);
+              const StatusIcon = statusBadge.icon;
+              const daysLeft = getDaysLeft(loan.dueDate);
+              const isOverdue = daysLeft < 0;
+
+              return (
+                <div
+                  key={loan.id}
+                  className={`bg-white rounded-xl shadow-lg p-4 sm:p-6 transition-all hover:shadow-xl border-l-4 ${
+                    isOverdue ? "border-red-500" : "border-indigo-500"
+                  }`}
+                >
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                    {/* Información del libro */}
+                    <div className="flex items-start gap-4 flex-1 min-w-0">
+                      <div className="w-16 h-20 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 flex-shrink-0 overflow-hidden">
+                        {loan.copy.book.coverImage ? (
+                          <img
+                            src={loan.copy.book.coverImage}
+                            alt={loan.copy.book.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-2xl">
+                            📖
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-gray-800 text-lg truncate">
+                          {loan.copy.book.title}
+                        </h3>
+                        <p className="text-sm text-gray-600">{loan.copy.book.author}</p>
+                        <p className="text-xs text-gray-500 font-mono">
+                          Código: {loan.copy.code}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Información del usuario */}
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <Users className="w-5 h-5 text-indigo-600" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-800 truncate">{loan.user.name}</p>
+                        <p className="text-xs text-gray-500">ID: {loan.user.identification}</p>
+                      </div>
+                    </div>
+
+                    {/* Fechas y estado */}
+                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 justify-end">
+                        <span className={`${statusBadge.color} px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1`}>
+                          <StatusIcon className="w-3 h-3" />
+                          {statusBadge.label}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500">
+                          Préstamo: {formatDate(loan.loanDate)}
+                        </p>
+                        <p className={`text-xs font-medium ${
+                          isOverdue ? "text-red-600" : "text-gray-600"
+                        }`}>
+                          Devolución: {formatDate(loan.dueDate)}
+                          {!isOverdue && (
+                            <span className="ml-1">({daysLeft} días)</span>
+                          )}
+                          {isOverdue && (
+                            <span className="ml-1 text-red-600">
+                              (Vencido hace {Math.abs(daysLeft)} días)
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Botón devolver */}
+                    <button
+                      onClick={() => handleReturn(loan.id)}
+                      disabled={returning === loan.id}
+                      className={`px-4 py-2 rounded-xl font-medium transition flex items-center gap-2 whitespace-nowrap flex-shrink-0 ${
+                        isOverdue
+                          ? "bg-red-500 hover:bg-red-600 text-white"
+                          : "bg-green-500 hover:bg-green-600 text-white"
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {returning === loan.id ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Procesando...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4" />
+                          Devolver
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Modal de confirmación de devolución */}
+        {showReturnModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <CheckCircle className="w-8 h-8 text-blue-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-gray-800">Confirmar Devolución</h2>
+                <p className="text-gray-500 text-sm mt-1">
+                  ¿Estás seguro de que quieres devolver este libro?
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                {/* Estado del ejemplar */}
+                <div>
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={isDamaged}
+                      onChange={(e) => setIsDamaged(e.target.checked)}
+                      className="w-4 h-4 text-red-600 rounded focus:ring-red-500"
+                    />
+                    <span className="flex items-center gap-1">
+                      <AlertTriangle className="w-4 h-4 text-red-500" />
+                      El ejemplar está dañado
+                    </span>
+                  </label>
+                </div>
+
+                {/* Observaciones */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Observaciones (opcional)
+                  </label>
+                  <textarea
+                    value={returnObservations}
+                    onChange={(e) => setReturnObservations(e.target.value)}
+                    placeholder="Estado del libro, observaciones, etc."
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setShowReturnModal(false);
+                    setReturnObservations("");
+                    setIsDamaged(false);
+                    setSelectedLoanId(null);
+                  }}
+                  className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmReturn}
+                  disabled={returning === selectedLoanId}
+                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:shadow-lg transition font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {returning === selectedLoanId ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Procesando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Confirmar
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        {loans.length > 0 && (
+          <div className="mt-6 text-center text-sm text-gray-500">
+            Mostrando <span className="font-semibold">{loans.length}</span> préstamos activos
+          </div>
+        )}
       </div>
     </div>
   );

@@ -691,7 +691,7 @@ export default function HomePage() {
       {/* CTA Final */}
       <section className="relative py-24 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-red-600 via-purple-600 to-blue-600"></div>
-        <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10"></div>
+        <div style={{ backgroundImage: 'url(data:image/svg+xml,...)' }}></div>
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6">
             ¿Listo para comenzar tu viaje?

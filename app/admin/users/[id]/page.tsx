@@ -1,10 +1,11 @@
+// app/admin/users/[id]/page.tsx
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { 
-  ArrowLeft, User, Mail, Phone, Shield, Calendar, 
+  ArrowLeft, User, Mail, Phone, Calendar, 
   BookOpen, Clock, CheckCircle, XCircle, AlertCircle,
-  Crown, UserCheck, BookMarked, TrendingUp
+  Crown, BookMarked
 } from "lucide-react";
 
 // Definir tipos
@@ -62,6 +63,7 @@ type UserWithRelations = {
   email: string;
   phone: string | null;
   role: string;
+  status: string;
   password: string;
   createdAt: Date;
   updatedAt: Date;
@@ -70,16 +72,25 @@ type UserWithRelations = {
   subscriptions: Subscription | null;
 };
 
-type UserDetailProps = {
-  params: {
-    id: string;
-  };
-};
+export default async function UserDetailPage({ 
+  params 
+}: { 
+  params: Promise<{ id: string }> 
+}) {
+  const { id } = await params;
 
-export default async function UserDetailPage({ params }: UserDetailProps) {
   const user = await prisma.user.findUnique({
-    where: { id: params.id },
-    include: {
+    where: { id: id },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      role: true,
+      status: true,
+      password: true,
+      createdAt: true,
+      updatedAt: true,
       loans: {
         include: {
           copy: {
@@ -122,7 +133,7 @@ export default async function UserDetailPage({ params }: UserDetailProps) {
     notFound();
   }
 
-  // Estadísticas del usuario con tipos
+  // Estadísticas del usuario
   const totalLoans = user.loans.length;
   const activeLoans = user.loans.filter((loan: LoanWithBook) => loan.status === "active").length;
   const overdueLoans = user.loans.filter((loan: LoanWithBook) => loan.status === "overdue").length;
@@ -168,8 +179,20 @@ export default async function UserDetailPage({ params }: UserDetailProps) {
     };
   };
 
+  const getUserStatus = (status: string) => {
+    const config = {
+      active: { color: "bg-green-100 text-green-700", label: "Activo", icon: CheckCircle },
+      suspended: { color: "bg-amber-100 text-amber-700", label: "Suspendido", icon: AlertCircle },
+      blocked: { color: "bg-red-100 text-red-700", label: "Bloqueado", icon: XCircle },
+      inactive: { color: "bg-gray-100 text-gray-700", label: "Inactivo", icon: XCircle },
+    };
+    return config[status as keyof typeof config] || config.active;
+  };
+
   const roleInfo = getRoleInfo(user.role);
   const RoleIcon = roleInfo.icon;
+  const statusInfo = getUserStatus(user.status || "active");
+  const StatusIcon = statusInfo.icon;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -187,6 +210,16 @@ export default async function UserDetailPage({ params }: UserDetailProps) {
                   <Mail className="w-4 h-4 mr-1" />
                   {user.email}
                 </p>
+                <div className="flex gap-2 mt-1">
+                  <span className={`${roleInfo.color} px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1`}>
+                    <RoleIcon className="w-3 h-3" />
+                    {roleInfo.label}
+                  </span>
+                  <span className={`${statusInfo.color} px-2 py-0.5 rounded-full text-xs font-medium flex items-center gap-1`}>
+                    <StatusIcon className="w-3 h-3" />
+                    {statusInfo.label}
+                  </span>
+                </div>
               </div>
             </div>
             <Link
