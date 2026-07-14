@@ -61,14 +61,18 @@ export async function POST(
 
     console.log("✅ Préstamo actualizado:", { status: updatedLoan.status });
 
-    // ✅ Siempre poner el ejemplar como "available" (disponible)
-    // Si el libro está dañado, se marca como "damaged"
+    // ✅ FORZAR el estado del ejemplar a "available" (o "damaged" si está dañado)
+    // Esto funciona sin importar si el estado actual es "reserved", "borrowed", etc.
     const copyStatus = isDamaged ? "damaged" : "available";
-    console.log(`📚 Actualizando ejemplar ${loan.copyId} a estado: ${copyStatus}`);
+    console.log(`📚 Actualizando ejemplar ${loan.copyId} de "${loan.copy.status}" a "${copyStatus}"`);
 
     const updatedCopy = await prisma.copy.update({
       where: { id: loan.copyId },
-      data: { status: copyStatus },
+      data: { 
+        status: copyStatus,
+        // Actualizar también la ubicación si es necesario
+        // location: loan.copy.location, // Mantener la ubicación
+      },
     });
 
     console.log("✅ Ejemplar actualizado:", { 
@@ -80,7 +84,7 @@ export async function POST(
     // ✅ Verificar que el estado se actualizó correctamente
     const verifyCopy = await prisma.copy.findUnique({
       where: { id: loan.copyId },
-      select: { id: true, status: true },
+      select: { id: true, code: true, status: true },
     });
     console.log("🔍 Verificación final - Estado del ejemplar:", verifyCopy);
 
