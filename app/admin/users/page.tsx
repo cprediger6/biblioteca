@@ -1,12 +1,12 @@
-// app/admin/users/page.tsx
+// app/admin/users/page.tsx //Nuevo
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import PrintCarnetButton from "@/components/PrintCarnetButton";
 import { 
   Plus, Search, Filter, User, Mail, Phone, 
   Calendar, Edit, Trash2,
-  Users, UserCheck, Crown, Download, X,
-  UserX
+  Users, UserCheck, Crown, Download,  X,
+  UserX  // ✅ Importar UserX
 } from "lucide-react";
 import DeleteUserButton from "@/components/DeleteUserButton";
 import { UserStatusToggle } from "@/components/UserStatusToggle";
@@ -22,6 +22,7 @@ type UserWithCounts = {
   photo: string | null;
   identification: string;
   role: string;
+  status: string; // ✅ Agregar campo status
   createdAt: Date;
   _count: {
     loans: number;
@@ -62,10 +63,18 @@ export default async function UsersPage({
     };
   }
 
-  // ✅ Usar include en lugar de select para evitar problemas con campos que pueden no existir
   const users = await prisma.user.findMany({
     where: whereClause,
-    include: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      photo: true,
+      identification: true,
+      role: true,
+      status: true, // ✅ Incluir status
+      createdAt: true,
       _count: {
         select: {
           loans: true,
@@ -80,7 +89,10 @@ export default async function UsersPage({
 
   // Estadísticas (siempre basadas en todos los usuarios, no solo los filtrados)
   const allUsers = await prisma.user.findMany({
-    include: {
+    select: {
+      id: true,
+      role: true,
+      status: true, // ✅ Incluir status
       _count: {
         select: {
           loans: true,
@@ -93,12 +105,8 @@ export default async function UsersPage({
   const adminUsers = allUsers.filter(u => u.role === "admin").length;
   const regularUsers = allUsers.filter(u => u.role === "user").length;
   const usersWithLoans = allUsers.filter(u => u._count.loans > 0).length;
-  
-  // ✅ Manejar status de forma segura - si no existe, usar "active" por defecto
-  // @ts-ignore - El campo puede no existir en producción
-  const activeUsers = allUsers.filter(u => (u.status || "active") === "active").length;
-  // @ts-ignore - El campo puede no existir en producción
-  const suspendedUsers = allUsers.filter(u => (u.status || "active") === "suspended").length;
+  const activeUsers = allUsers.filter(u => u.status === "active").length;
+  const suspendedUsers = allUsers.filter(u => u.status === "suspended").length;
 
   const getRoleBadge = (role: string) => {
     if (role === "admin") {
@@ -291,10 +299,7 @@ export default async function UsersPage({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {users.map((user) => {
                 const { color, label, icon: RoleIcon } = getRoleBadge(user.role);
-                // ✅ Manejar status de forma segura
-                // @ts-ignore - El campo puede no existir en producción
-                const userStatus = user.status || "active";
-                const statusBadge = getStatusBadge(userStatus);
+                const statusBadge = getStatusBadge(user.status);
                 const StatusIcon = statusBadge.icon;
                 
                 return (
@@ -306,7 +311,7 @@ export default async function UsersPage({
                     <div className={`h-20 sm:h-24 bg-gradient-to-r ${
                       user.role === "admin" 
                         ? "from-purple-500 to-pink-500" 
-                        : userStatus === "suspended"
+                        : user.status === "suspended"
                         ? "from-amber-500 to-orange-500"
                         : "from-blue-500 to-indigo-500"
                     } relative`}>
@@ -395,8 +400,7 @@ export default async function UsersPage({
                         <UserStatusToggle 
                           userId={user.id}
                           userName={user.name}
-                          // @ts-ignore - El campo puede no existir en producción
-                          currentStatus={user.status || "active"}
+                          currentStatus={user.status}
                         />
                         
                         <Link
