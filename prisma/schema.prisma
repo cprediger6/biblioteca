@@ -9,7 +9,7 @@ datasource db {
 }
 
 // ============================================
-// MODELOS PARA AUTENTICACIÓN (NEXTAUTH)
+// MODELOS PARA AUTENTICACIÓN (NEXTAUTH) 
 // ============================================
 
 model User {

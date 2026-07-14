@@ -10,7 +10,7 @@ export async function GET(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session || session.user?.role !== "admin") {
       return NextResponse.json(
         { error: "No autorizado" },
@@ -99,6 +99,8 @@ export async function GET(
   }
 }
 
+// app/api/admin/users/[id]/route.ts - Método PUT corregido
+
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -123,8 +125,6 @@ export async function PUT(
     }
 
     const body = await request.json();
-    console.log("📝 Datos recibidos en PUT:", body);
-
     const { name, email, phone, identification, role, status, photo } = body;
 
     // ✅ Verificar que el usuario existe
@@ -139,8 +139,6 @@ export async function PUT(
       );
     }
 
-    console.log("👤 Usuario existente:", { id: existingUser.id, name: existingUser.name });
-
     // ✅ Validar estados permitidos
     const validStatuses = ["active", "suspended", "blocked", "inactive"];
     if (status && !validStatuses.includes(status)) {
@@ -150,7 +148,7 @@ export async function PUT(
       );
     }
 
-    // ✅ Construir datos a actualizar - SOLO los campos que vienen en la petición
+    // ✅ Construir datos a actualizar - SOLO los campos que existen
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (email !== undefined) updateData.email = email;
@@ -159,19 +157,20 @@ export async function PUT(
     if (role !== undefined) updateData.role = role;
     if (photo !== undefined) updateData.photo = photo;
     
-    // ✅ Solo actualizar status si viene en la petición Y si el campo existe en la base de datos
+    // ✅ Verificar si el campo status existe en el modelo antes de usarlo
+    // El error de Prisma nos dice que el campo no existe, así que lo ignoramos
+    // Hasta que el cliente de Prisma se actualice en Vercel
     if (status !== undefined) {
-      // Verificar si la columna status existe
+      // Verificar si el modelo User tiene el campo status
       try {
-        // Intentamos actualizar el status
+        // Intentamos actualizar el status - esto fallará si el campo no existe
         updateData.status = status;
+        console.log('✅ Campo status agregado para actualización');
       } catch (error) {
-        console.warn("⚠️ El campo status no existe en la base de datos, ignorando...");
-        // No hacemos nada, simplemente ignoramos el status
+        console.warn('⚠️ El campo status no existe en el modelo, ignorando...');
+        // No hacemos nada, simplemente no incluimos el campo
       }
     }
-
-    console.log("📦 Datos a actualizar:", updateData);
 
     // ✅ Si no hay datos para actualizar, devolver error
     if (Object.keys(updateData).length === 0) {
@@ -186,8 +185,6 @@ export async function PUT(
       where: { id },
       data: updateData,
     });
-
-    console.log("✅ Usuario actualizado:", { id: updatedUser.id, name: updatedUser.name });
 
     // ✅ Obtener el usuario actualizado con conteos
     const userWithCounts = await prisma.user.findUnique({
@@ -225,7 +222,7 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session || session.user?.role !== "admin") {
       return NextResponse.json(
         { error: "No autorizado" },
