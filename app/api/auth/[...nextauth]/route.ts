@@ -36,12 +36,23 @@ export const authOptions: AuthOptions = {
           return null;
         }
 
+        // ✅ Convertir a any para acceder a campos que pueden no existir en el tipo
+        const userAny = user as any;
+
+        // ✅ Verificar si el usuario está bloqueado
+        if (userAny.status === "blocked") {
+          throw new Error("Tu cuenta ha sido bloqueada. Contacta al administrador.");
+        }
+
+        // ✅ Devolver todos los campos necesarios
         return {
           id: user.id,
           email: user.email,
           name: user.name,
           role: user.role || "user",
           photo: user.photo || null,
+          status: userAny.status || "active",
+          lastPaymentDate: userAny.lastPaymentDate || null,
         };
       },
     }),
@@ -52,6 +63,8 @@ export const authOptions: AuthOptions = {
         token.id = user.id;
         token.role = user.role;
         token.photo = user.photo || null;
+        token.status = user.status || "active";
+        token.lastPaymentDate = user.lastPaymentDate || null;
       }
       return token;
     },
@@ -60,6 +73,8 @@ export const authOptions: AuthOptions = {
         session.user.id = token.id as string;
         session.user.role = token.role as string;
         session.user.photo = token.photo as string | null;
+        session.user.status = token.status as string;
+        session.user.lastPaymentDate = token.lastPaymentDate as Date | null;
       }
       return session;
     },
