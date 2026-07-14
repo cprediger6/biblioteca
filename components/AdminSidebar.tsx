@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import { CreditCard } from "lucide-react";
 import {
     LayoutDashboard,
     LibraryBig,
@@ -60,6 +61,11 @@ const menu = [
         label: "Reservaciones",
         href: "/admin/reservations"
     },
+    {
+    icon: CreditCard,
+    label: "Pagos",
+    href: "/admin/pagos"
+  },
     {
         icon: Settings,
         label: "Configuración",

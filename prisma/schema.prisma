@@ -22,7 +22,7 @@ model User {
   photo          String?
   role           String   @default("user")
   status         String   @default("active")
-  lastPaymentDate DateTime?
+  lastPaymentDate DateTime? // ✅ Este campo debe existir
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -181,6 +181,7 @@ model Payment {
   status      String   @default("pending") // pending, completed, failed, refunded
   reference   String   @unique
   description String
+  paymentDate DateTime @default(now()) // ✅ Agregar este campo
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   
@@ -189,6 +190,7 @@ model Payment {
 
   @@index([userId])
   @@index([status])
+  @@index([paymentDate])
 }
 model Favorite {
   id        String   @id @default(cuid())
