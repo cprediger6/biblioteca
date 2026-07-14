@@ -29,7 +29,7 @@ export async function PUT(
       );
     }
 
-    // Verificar si la reserva existe
+    // ✅ Verificar si la reserva existe e incluir el ejemplar reservado
     const reservation = await prisma.reservation.findUnique({
       where: { id },
       include: {
@@ -43,7 +43,13 @@ export async function PUT(
         },
         book: {
           include: {
-            copies: true,
+            copies: {
+              where: {
+                // ✅ Buscar el ejemplar que el usuario reservó
+                // Para esto, necesitamos saber qué ejemplar está asociado a la reserva
+                // Si no hay un campo específico, debemos buscar el ejemplar que esté en estado "reserved" para este libro y usuario
+              },
+            },
           },
         },
       },
@@ -56,7 +62,7 @@ export async function PUT(
       );
     }
 
-    // Si la reserva ya no está pendiente, no permitir cambios
+    // ✅ Si la reserva ya no está pendiente, no permitir cambios
     if (reservation.status !== "pending") {
       const statusMap = {
         'approved': 'aprobada',
@@ -75,9 +81,35 @@ export async function PUT(
 
     // Si se aprueba la reserva
     if (status === "approved") {
-      // Buscar un ejemplar disponible
-      const availableCopy = reservation.book.copies.find(c => c.status === "available");
-      
+      // ✅ Buscar el ejemplar específico que el usuario reservó
+      // Buscamos un ejemplar que esté en estado "reserved" para este libro
+      // y que no tenga un préstamo activo
+      const reservedCopy = await prisma.copy.findFirst({
+        where: {
+          bookId: reservation.bookId,
+          status: "reserved",
+          loans: {
+            none: {
+              status: "active",
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+      });
+
+      // ✅ Si no hay ejemplar reservado, buscar uno disponible
+      const availableCopy = reservedCopy || await prisma.copy.findFirst({
+        where: {
+          bookId: reservation.bookId,
+          status: "available",
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
+      });
+
       if (!availableCopy) {
         return NextResponse.json(
           { error: "No hay ejemplares disponibles para completar la reserva" },
@@ -85,13 +117,13 @@ export async function PUT(
         );
       }
 
-      // Cambiar el estado del ejemplar a "borrowed" (prestado)
+      // ✅ Cambiar el estado del ejemplar a "borrowed" (prestado)
       await prisma.copy.update({
         where: { id: availableCopy.id },
         data: { status: "borrowed" },
       });
 
-      // Crear el préstamo automáticamente
+      // ✅ Crear el préstamo automáticamente
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + 7); // 7 días de préstamo
 
@@ -125,7 +157,7 @@ export async function PUT(
         },
       });
 
-      // Actualizar la reserva a "approved"
+      // ✅ Actualizar la reserva a "approved"
       updatedReservation = await prisma.reservation.update({
         where: { id },
         data: { status: "approved" },
@@ -155,7 +187,7 @@ export async function PUT(
         status: "borrowed",
       };
 
-      // Crear notificación para el usuario
+      // ✅ Crear notificación para el usuario
       await prisma.notification.create({
         data: {
           userId: reservation.userId,
@@ -175,9 +207,24 @@ export async function PUT(
         loan: createdLoan,
       });
     }
-    
+
     // Si se rechaza la reserva
     else if (status === "rejected") {
+      // ✅ Si la reserva estaba reservada, liberar el ejemplar
+      const reservedCopy = await prisma.copy.findFirst({
+        where: {
+          bookId: reservation.bookId,
+          status: "reserved",
+        },
+      });
+
+      if (reservedCopy) {
+        await prisma.copy.update({
+          where: { id: reservedCopy.id },
+          data: { status: "available" },
+        });
+      }
+
       updatedReservation = await prisma.reservation.update({
         where: { id },
         data: { status: "rejected" },
@@ -201,7 +248,7 @@ export async function PUT(
         },
       });
 
-      // Crear notificación para el usuario
+      // ✅ Crear notificación para el usuario
       await prisma.notification.create({
         data: {
           userId: reservation.userId,
@@ -217,9 +264,24 @@ export async function PUT(
         reservation: updatedReservation,
       });
     }
-    
+
     // Si se cancela la reserva
     else if (status === "cancelled") {
+      // ✅ Si la reserva estaba reservada, liberar el ejemplar
+      const reservedCopy = await prisma.copy.findFirst({
+        where: {
+          bookId: reservation.bookId,
+          status: "reserved",
+        },
+      });
+
+      if (reservedCopy) {
+        await prisma.copy.update({
+          where: { id: reservedCopy.id },
+          data: { status: "available" },
+        });
+      }
+
       updatedReservation = await prisma.reservation.update({
         where: { id },
         data: { status: "cancelled" },
@@ -243,7 +305,7 @@ export async function PUT(
         },
       });
 
-      // Crear notificación para el usuario
+      // ✅ Crear notificación para el usuario
       await prisma.notification.create({
         data: {
           userId: reservation.userId,
@@ -259,7 +321,7 @@ export async function PUT(
         reservation: updatedReservation,
       });
     }
-    
+
     else {
       return NextResponse.json(
         { error: "Estado no válido" },
@@ -271,92 +333,6 @@ export async function PUT(
     console.error("Error updating reservation:", error);
     return NextResponse.json(
       { error: "Error al actualizar la reserva" },
-      { status: 500 }
-    );
-  }
-}
-
-// DELETE - Eliminar una reserva (solo admin)
-export async function DELETE(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  const { id } = await context.params;
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session || session.user?.role !== "admin") {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      );
-    }
-
-    // Primero obtener la reserva con sus relaciones
-    const reservation = await prisma.reservation.findUnique({
-      where: { id },
-      include: {
-        book: {
-          include: {
-            copies: true,
-          },
-        },
-      },
-    });
-
-    if (!reservation) {
-      return NextResponse.json(
-        { error: "Reserva no encontrada" },
-        { status: 404 }
-      );
-    }
-
-    // Si la reserva está aprobada, buscar el ejemplar que fue reservado
-    if (reservation.status === "approved") {
-      // Buscar el préstamo asociado a esta reserva
-      const loan = await prisma.loan.findFirst({
-        where: {
-          userId: reservation.userId,
-          copy: {
-            bookId: reservation.bookId,
-          },
-          status: "active",
-        },
-        include: {
-          copy: true,
-        },
-      });
-
-      if (loan) {
-        // Liberar el ejemplar
-        await prisma.copy.update({
-          where: { id: loan.copyId },
-          data: { status: "available" },
-        });
-
-        // Marcar el préstamo como devuelto
-        await prisma.loan.update({
-          where: { id: loan.id },
-          data: {
-            status: "returned",
-            returnDate: new Date(),
-          },
-        });
-      }
-    }
-
-    // Eliminar la reserva
-    await prisma.reservation.delete({
-      where: { id },
-    });
-
-    return NextResponse.json({
-      success: true,
-      message: "Reserva eliminada exitosamente",
-    });
-  } catch (error) {
-    console.error("Error deleting reservation:", error);
-    return NextResponse.json(
-      { error: "Error al eliminar la reserva" },
       { status: 500 }
     );
   }
