@@ -181,6 +181,7 @@ model Payment {
   status      String   @default("pending") // pending, completed, failed, refunded
   reference   String   @unique
   description String
+   period      String?  // ✅ Agregar este campo - mes de pago ej: "2024-01"
   paymentDate DateTime @default(now()) // ✅ Agregar este campo
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
