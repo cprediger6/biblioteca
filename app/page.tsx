@@ -273,20 +273,7 @@ export default function HomePage() {
                           <ArrowRight className="w-4 h-4 text-gray-400 ml-auto group-hover:text-white transition-colors" />
                         </Link>
                         <div className="border-t border-white/10 my-2"></div>
-                        <Link
-                          href="/register"
-                          onClick={() => setShowLoginOptions(false)}
-                          className="flex items-center gap-4 p-4 rounded-xl hover:bg-white/5 transition-colors group"
-                        >
-                          <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 rounded-xl flex items-center justify-center">
-                            <UserPlus className="w-6 h-6 text-white" />
-                          </div>
-                          <div className="text-left">
-                            <p className="font-semibold text-white">Registrarse</p>
-                            <p className="text-xs text-gray-400">Comienza tu prueba gratis</p>
-                          </div>
-                          <ArrowRight className="w-4 h-4 text-gray-400 ml-auto group-hover:text-white transition-colors" />
-                        </Link>
+                        
                       </div>
                     </div>
                   )}
@@ -339,13 +326,7 @@ export default function HomePage() {
               <div className="flex flex-col sm:flex-row gap-4">
                 {!session ? (
                   <>
-                    <Link
-                      href="/register"
-                      className="group inline-flex items-center justify-center px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-500 text-white rounded-full font-semibold shadow-lg shadow-blue-200/40 hover:shadow-xl hover:shadow-blue-300/50 transition-all hover:scale-105 text-base gap-2"
-                    >
-                      Comenzar Gratis
-                      <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                    </Link>
+                    
                     <Link
                       href="/login"
                       className="inline-flex items-center justify-center px-8 py-4 text-gray-600 font-semibold rounded-full border-2 border-gray-200 hover:border-blue-300 hover:text-blue-500 hover:shadow-lg transition-all text-base gap-2"
