@@ -346,7 +346,7 @@ export default function AdminPaymentsPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm text-black border border-gray-200 rounded-lg">
                 <thead>
                   <tr className="bg-gray-50">
                     <th className="px-4 py-2 text-left">Alumno</th>
@@ -506,7 +506,7 @@ export default function AdminPaymentsPage() {
 
           {/* Tabla de pagos */}
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm text-black border border-gray-200 rounded-lg">
               <thead>
                 <tr className="bg-gray-50">
                   <th className="px-4 py-2 text-left">Cliente</th>
