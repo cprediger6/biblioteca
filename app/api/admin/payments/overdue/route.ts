@@ -4,6 +4,34 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 
+// ✅ Función para obtener la moneda configurada
+async function getCurrencyCode(): Promise<string> {
+  try {
+    // Intentar obtener la configuración
+    const currencySetting = await prisma.settings.findUnique({
+      where: { key: "currency" },
+    });
+    return currencySetting?.value || "USD";
+  } catch (error) {
+    // Si hay error, usar valor por defecto
+    console.warn("Error obteniendo moneda, usando USD por defecto");
+    return "USD";
+  }
+}
+
+// ✅ Función para obtener la mensualidad configurada
+async function getMonthlyFee(): Promise<number> {
+  try {
+    const settings = await prisma.settings.findUnique({
+      where: { key: "monthlyFee" },
+    });
+    return settings ? parseFloat(settings.value) : 10;
+  } catch (error) {
+    console.warn("Error obteniendo monthlyFee, usando 10 por defecto");
+    return 10;
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -15,10 +43,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // ✅ Obtener configuración
+    const monthlyFee = await getMonthlyFee();
+    const currency = await getCurrencyCode();
+
     const now = new Date();
     const currentMonth = now.toISOString().slice(0, 7); // "2024-01"
     
-    // ✅ Obtener todos los pagos completos de cada usuario con sus períodos
+    // ✅ Obtener todos los usuarios con sus pagos
     const allUsers = await prisma.user.findMany({
       where: {
         role: "user",
@@ -65,14 +97,14 @@ export async function GET(request: NextRequest) {
         .filter((p: any) => p.period)
         .map((p: any) => p.period);
       
-      // Determinar el mes de inicio (cuando se registró el usuario o el primer pago)
+      // Determinar el mes de inicio
       const startDate = user.createdAt;
       const startMonth = startDate.toISOString().slice(0, 7);
       
       // Generar todos los meses desde el inicio hasta el mes actual
       const allMonths: string[] = [];
       let current = new Date(startDate);
-      current.setDate(1); // Asegurar que estamos en el primer día del mes
+      current.setDate(1);
       
       while (current <= now) {
         const monthKey = current.toISOString().slice(0, 7);
@@ -87,7 +119,6 @@ export async function GET(request: NextRequest) {
       const overdueMonths = pendingMonths.filter(month => month <= currentMonth);
       
       // Calcular el monto adeudado
-      const monthlyFee = 10;
       const totalDebt = overdueMonths.length * monthlyFee;
       
       // Determinar el estado de la deuda
@@ -158,7 +189,8 @@ export async function GET(request: NextRequest) {
       totalDebt,
       totalMonthsOverdue,
       criticalOverdue,
-      monthlyFee: 10,
+      monthlyFee,
+      currency,
       currentMonth,
     });
   } catch (error) {

@@ -207,3 +207,26 @@ model Favorite {
   @@index([userId])
   @@index([bookId])
 }
+
+model Settings {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+}
+
+// ✅ Agregar modelo para monedas (opcional - para tener un catálogo)
+model Currency {
+  id          String   @id @default(cuid())
+  code        String   @unique  // USD, COP, MXN, etc.
+  name        String
+  symbol      String   // $, B/., ₡, etc.
+  country     String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
